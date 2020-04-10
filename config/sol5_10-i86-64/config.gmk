@@ -1,0 +1,53 @@
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: config.gmk,v 1.1 2005/04/18 05:22:53 dkc Exp $
+ 
+
+
+OBJ        =$(OBJ_PRFX).o
+
+ECHON      =/usr/ucb/echo -n
+RM         =rm
+ifndef AR_CR
+AR_CR      =ar cr
+AR_OUT     =
+endif
+ifndef AR_UPDATE
+AR_UPDATE  =u
+endif
+ifndef LD
+LD         =ld $(USR_LDFLAGS)
+endif
+ifndef LD_64
+LD_64      =-64
+endif
+ifndef LD_OUT
+LD_OUT     =-o
+endif
+ifndef LD_SO
+LD_SO      =-G
+endif
+
+MODE_CFLAG:=-m64
+LD        :=$(LD) $(LD_64)
+
+LIB_PRFX   =lib
+LIB_TYPE_A =.a
+LIB_TYPE_SO=.so
+
+USE_LIBS   = -L$(OBJ_LIB_DIR)
+
+X11_INC    = /usr/openwin/include/\
+	     /usr/openwin/include/X11/\
+	     /usr/openwin/include/X11/Xaw/
+
+X11_LIBS   = -L/usr/openwin/lib/ -lXt -lXaw -lXmu -lX11
+ifndef USR_NOTHREADS
+THREAD_LIB = -lpthread
+endif
+SYS_LIBS   = $(DEBUG_LIBS) -lm -lsocket -lnsl -lresolv -ldl -lcurses\
+		$(THREAD_LIB)
+
+SYS_ERRNO_H=/usr/include/sys/errno.h
+
+UNIX       =solaris

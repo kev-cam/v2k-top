@@ -1,0 +1,25 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.9 2020/04/10 01:06:36 cvs Exp $
+ 
+
+
+default: all
+
+OVERRIDE_SETUP=TRUE
+
+ifndef CONFIG_DIR
+CONFIG_DIR =$(HOME)/$(PROJECT)-$(VERSION)
+endif
+
+include $(CONFIG_DIR)/common.gmk
+
+setup:
+	@echo OK
+
+add_uname:
+	if [ ! -d mkdir $(SYS_OS)-$(SYS_CPU) ] ; then mkdir $(SYS_OS)-$(SYS_CPU) ; fi
+	uname -a > $(SYS_OS)-$(SYS_CPU)/uname
+	cvs  add   $(SYS_OS)-$(SYS_CPU)/uname
+all:
+	@echo Nothing to do

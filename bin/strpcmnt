@@ -1,0 +1,86 @@
+#!/usr/bin/perl -s
+# Copyright (c) 1998,2001 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: strpcmnt,v 1.5 2007/02/04 01:38:24 dkc Exp $
+ 
+if (defined($cd))  {
+    chdir $cd;
+}
+
+if (defined($inc))  {
+    open(STDIN,$inc);
+    if (defined $skip) {
+        SKIP: while (<>) {
+           if (/^..FAST/) {last SKIP;}
+        }
+    }
+}
+
+if (defined($out))  {
+    $_ = $out;
+    s+.*/++;
+    tr/.-/__/;
+    tr/[a-z]/[A-Z]/;
+    $def = $_;
+}
+
+$source = "";
+$incd   = ();
+
+sub dofile($@) {
+
+    my $incl = $_[0];
+    my $name = $_[1];
+    my $dpth = $_[2];
+    my $strm = "INC".$dpth;
+
+    print "/* $name $dpth */\n";
+
+LINE: while (<$incl>) {
+
+        if ("\n" eq $_)   {next LINE;}
+        if (/^..ENDFAST/) {last LINE;}
+
+	if (/^\#.*include/) {
+	    $line = $_;
+	    s/.*<//;
+	    s/>.*//;
+	    chomp;
+	    if ( -f $_ ) {
+		if (!$incd{$_}) {
+		    $incd{$_} = 1;
+                    eval open($strm,$_);
+                    eval dofile(\*$strm,$_,$dpth+1);
+		}
+		next LINE;
+	    }
+	    $_ = $line;
+	}
+
+	$_ = $source.$_;
+
+	if (m'/\*.*\*/'s) {
+	    s/$@//;
+	    print "$_";
+	    $_ = "";
+	} elsif (!m'/\*') {
+	    print "$_";
+	    $_ = "";
+	}
+
+	$source = $_;        
+    }
+
+    print "$source";
+
+}
+
+if ($def) {
+    print "#ifndef $def\n#define $def\n\n";
+}
+
+dofile(\*STDIN,$inc,0);
+
+if ($def) {
+    print "\n#endif // $def\n";
+}

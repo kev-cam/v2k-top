@@ -1,0 +1,38 @@
+/* Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: $Id: TemplateSdfPool.fld,v 1.7 2003/01/14 02:26:06 dkc Exp $ */
+  
+
+
+poolRef          sdfversion;
+poolRef          version;
+poolRef          design;
+poolRef          date;
+poolRef          vendor;
+poolRef          program;
+poolRef          process;
+char             divider;
+int              tsi;
+int              tse;
+plRvalue         voltage;
+plRvalue         temperature;
+long             cells;
+long             pps;
+long             dbls;
+long             trpls;
+long             val2s;
+long             val3s;
+long             val6s;
+long             val12s;
+long             ports;
+long             names;
+long             paths;
+IREF(plCell)     cell;
+IREF(plPortPath) VAR_ARRAY_PTR(pp);
+IREF(double)     VAR_ARRAY_PTR(dbl);
+IREF(plRtriple)  VAR_ARRAY_PTR(trpl);
+IREF(plRval2)    VAR_ARRAY_PTR(val2);
+IREF(plRval3)    VAR_ARRAY_PTR(val3);
+IREF(poolRef)    VAR_ARRAY_PTR(port);
+IREF(poolRef)    VAR_ARRAY_PTR(name);
+IREF(plCellInst) VAR_ARRAY_PTR(path);

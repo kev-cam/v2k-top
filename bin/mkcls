@@ -1,0 +1,38 @@
+#!/usr/bin/perl -s
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: mkcls,v 1.9 2007/02/04 01:38:24 dkc Exp $
+ 
+use lib "$ENV{PROJECT_ROOT}/$ENV{PROJECT}/bin";
+use POOL;
+
+if (defined($out)) {
+    open (STDOUT,">$out");
+    $_ = $out;
+}
+
+s/-cls.h//;
+
+$f = $_;
+
+if (/.*\//) {
+    $pth = $_;
+    s+.*/++g;
+    $f = $_;
+    $_ = $pth;
+    s/$f//;
+    chdir "$_";
+}
+
+@m = split ' ',$modes;
+
+print "/* Created by mkcls */\n\n";
+
+foreach $_ (@m) {
+    tr/[a-z]/[A-Z]/;
+    $mode=$_;
+    $_ = $f;
+    s/Template/$cls{$mode}/;
+    print "#undef  $mode"."_CLASS\n";
+    print "#define $mode"."_CLASS $_\n";
+}

@@ -1,0 +1,1123 @@
+/* Copyright (c) 1998-2007 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: */ extern "C" const char * cg_pool_pcc_rcsid() {return "$Id: cg_pool.pcc,v 1.24 2020/04/08 01:01:40 dkc Exp $";}
+
+#define VERILOG3
+#define VERILOG4
+
+#include "system.h"
+#include "error.h"
+#include "assertions.h"
+#include "poolmngr.h"
+#include "v2k_mem.h"
+#define NEED_VERILOG
+#define NEED_SYSFUNC
+#include "tokpool.h"
+#include "verilog.h"
+#include "mod_pool.h"
+#include "arith.h"
+
+#define THIS_EXPR TemplateExpr
+
+bool TemplatePoPool::exprBits(plExpr *expr,plExpr *td,cgData *dp)
+{
+  int sts = 0;
+
+  if (expr) {
+    ((BaseExpr *)td)->set(BX_SIZE);
+
+    sts = evalExpr(dp->ip,expr,td);
+  }
+
+  return sts;
+}
+
+const char *TemplatePoPool::TypeOf(plExpr *expr,cgData *dp,char *tbuf)
+{
+  plExpr tdx;
+
+  exprBits(expr,&tdx,dp);
+
+  return cppType(&tdx.value.td,tbuf);
+}
+
+const char *TemplatePoPool::varTypeOf(plExpr *expr,cgData *dp,String *tbuf,const char *x_str = 0)
+{
+  char   buff[MAX_STR_TYPE];
+  plExpr tdx;
+
+  exprBits(expr,&tdx,dp);
+
+  if (tdx.value.td.size > 0) {
+    tbuf->printf("_Var<%s>",cppType(tdx.value.td.size,buff));
+  } else switch (-tdx.value.td.size) {
+    case VT_STRING: tbuf->printf("_c_string");
+  }
+
+  return tbuf->str();
+}
+
+eCG TemplatePoPool::codegenExprCat(plExpr *expr,cgData *dp,const char *cat)
+{
+  eCG sts = CG_OK;
+  int w;
+
+ retry:
+  if (expr && cat) {
+    switch (expr->typ) {
+
+    case VT_ALIAS:    expr = P(expr->value.xpr); goto retry;
+
+    case VT_OPERATOR: switch (expr->value.op) {
+      case OPR_LIST1:
+      case OPR_CAT:   sts = codegenExprCat((plExpr *)P(expr->left),dp,cat);
+                      dp->C()->printf(";");
+                      sts = codegenExprCat((plExpr *)P(expr->right),dp,cat);
+                      return sts;
+    }}
+
+    plExpr tdx;
+    exprBits(expr,&tdx,dp);
+    dp->C()->printf(cat,tdx.value.td.size);
+    sts = codegenExpr(expr,dp);
+    dp->C()->printf(")");
+    return sts;
+  }
+
+  return codegenExpr(expr,dp);
+}
+
+inline static bool simpleAssign(plExpr *lhs,plExpr *rhs) {
+    return false;
+}
+
+eCG TemplatePoPool::codegenExpr(plExpr *expr,cgData *dp,int *pfti)
+{
+  int         i;
+  const char *ops,
+             *xtra     = "",
+             *nm_frmt  = "%s%s";
+  poolRef     nm;
+  plStmtAny  *blk;
+  plPrtdObj  *tf;
+  OPR         prnt_op;
+  int         cgx_flgs = dp->flgs(); 
+
+  dp->clrFlag(CGX_PLI_ARG); 
+
+ retry:
+  if (expr) switch (expr->typ) {
+
+  case VT_ALIAS:  expr = P(expr->value.xpr); goto retry;
+
+  case VT_VOID:   if (NON_EXPR(expr->left.ptr)) {
+                    switch(XDATA(expr->left.ptr)) {
+                    case XD_DLLR: goto glob_ref;
+                    }
+                  }
+                  dp->C()->printf("/* void */");
+                  break;
+  case VT_LINT:
+  case VT_BOOL:
+  case VT_INT:    dp->C()->printf("%d",expr->value.i);                   break;
+  case VT_LUINT:
+  case VT_UINT:   dp->C()->printf("((unsigned int)0x%X)",expr->value.u); break;
+  case VT_DOUBLE: dp->C()->printf("%g",expr->value.d);                   break;
+  case VT_STRING: { const char *sp = strDeref(expr->value.ref);
+                    dp->C()->printf("(&\"");
+                    for (; *sp ; sp++) switch (*sp) {
+                    case '\\': dp->C()->printf("\\\\");   break;
+                    case '"':  dp->C()->printf("\\\"");   break;
+                    case '\n': dp->C()->printf("\\n");    break;
+                    default:   dp->C()->printf("%c",*sp); break;
+		    }
+	      	    dp->C()->printf("\"[0])");
+                  } break;
+
+  case VT_REFG:
+   glob_ref:
+    nm   = expr->value.ref;
+    if (nm.index < 0) {
+      REF_FROM_INT(nm,-nm.index);
+    }
+    switch (expr->rtyp) {
+    case REF_PLI_FUNC: if (pfti) { pfti[0] = nm.pool; 
+                                   pfti[1] = nm.index; 
+                                   return CG_PLI_FUNC; }
+                       return codegenSysCall(CG_PLI_FUNC,&nm,0,dp);
+    case REF_SYS_FUNC: if (pfti) { pfti[0] = nm.pool; 
+                                   pfti[1] = nm.index; 
+                                   return CG_SYS_FUNC; }
+                       return codegenSysCall(CG_SYS_FUNC,&nm,0,dp);
+    case REF_SYS_TASK: if (pfti) { pfti[0] = nm.pool; 
+                                   pfti[1] = nm.index; 
+                                   return CG_SYS_TASK; }
+                       return codegenSysCall(CG_SYS_TASK,&nm,0,dp);
+    default:
+      assert(0);
+    }
+    break;
+
+  case VT_REFL:
+    switch (expr->rtyp) {
+    default:
+      if ((i = expr->value.rrf.scp) >= 0) {
+        plScope   *scp = &P(mod_pool()->scope)[i];
+        blk            = P(scp->stmt);
+        eSTMT      st  = (eSTMT)blk->Header.typ;
+        switch (st) {
+        case STMT_TASK: {
+          plStmtTask *tsk = (plStmtTask *)blk;
+          plPrtdObj  *ft  = &P(mod_pool()->task)[tsk->task_indx];
+	  dp->C()->printf("_t_%d.",tsk->task_indx);
+          switch (expr->rtyp) {
+          case REF_PORT:
+            nm = P(ft->port)[expr->value.rrf.index].name;
+            goto print_nm;
+          default:
+            assert(0);
+          }
+        } break;
+        case STMT_FUNC_A:
+        case STMT_FUNC: {
+          plStmtFunc *fnc = (plStmtFunc *)blk;
+          plPrtdObj  *ft  = &P(mod_pool()->func)[fnc->func_indx];
+	  dp->C()->printf("_f_%d.",fnc->func_indx);
+          switch (expr->rtyp) {
+          case REF_PORT:
+            nm = P(ft->port)[expr->value.rrf.index].name;
+            goto print_nm;
+          case REF_RETURN:
+            nm = ft->name;
+            goto print_nm;
+          default:
+            assert(0);
+          }
+        } break;
+        default: assert(0);
+        }
+      }
+      else switch (expr->rtyp) {
+      case REF_PORT:
+        nm = P(port)[expr->value.rrf.index].name;
+	if (!dp->lhs()) {
+          if (cgx_flgs & CGX_PLI_ARG) {
+             nm_frmt = "(&%s)";
+	  } else if (cgx_flgs & CGX_PRT_ARG) {
+             xtra    = ".PF()";
+	  } else if (cgx_flgs & CGX_PRT_ASS) {
+             xtra    = ".value";
+	  } else if (!(dp->scp & CGS_EDGE)) {
+              if ((cgx_flgs & CGX_LHS)) {
+                     xtra = ".Addr()";  }
+              else { xtra = ".Value()"; }
+	  }
+        }
+        goto print_nm;
+      case REF_PARM:
+        nm = P(parm)[expr->value.rrf.index].nm;
+        goto print_nm;
+      case REF_TASK:
+        if (pfti) { *pfti = expr->value.rrf.index;
+                    return CG_TASK; }
+        tf = &P(mod_pool()->task)[expr->value.rrf.index];
+        nm = tf->name;
+        goto print_nm;
+      case REF_FUNC:
+        if (pfti) { *pfti = expr->value.rrf.index;
+                    return CG_FUNC; }
+        tf = &P(mod_pool()->func)[expr->value.rrf.index];
+        nm = tf->name;
+        goto print_nm;
+      default:
+        assert(0);
+      }
+    }
+    break;
+
+  case VT_OPERATOR:
+    prnt_op = dp->prnt_op;
+    switch (dp->prnt_op = expr->value.op) {
+    case OPR_DELAY:    dp->newSusp();
+                       if (dp->scp & CGS_TF) {
+                         dp->C()->printf("Delay(&_%s_%d,%d,_master,_SCALE_TIME(",
+                                         dp->str(),dp->Cntxt(),dp->Susp());
+                       } else {
+                         dp->P()->printf("C_ENTRY_POINT_FWD(proc%d_%d)(void *); C_ENTRY_POINT_DWF\n",
+                                         dp->Cntxt(),dp->Susp());
+                         dp->C()->printf("Delay(&_%s_%d,%d,proc%d_%d,_SCALE_TIME(",
+                                         dp->str(),dp->Cntxt(),dp->Susp(),
+                                         dp->Cntxt(),dp->Susp());
+                       }
+                       codegenExpr((plExpr *)P(expr->left),dp);
+                       dp->C()->printf(")); return %d; _L_%d:;",
+                                    dp->Susp(),dp->Susp());
+		       break;
+    case OPR_RANGE:    dp->D()->printf("{");
+                       codegenExpr((plExpr *)P(expr->left),dp);
+                       dp->D()->printf(",");
+                       codegenExpr((plExpr *)P(expr->right),dp);
+                       dp->D()->printf("}");
+                       break;
+
+    case OPR_ASSIGN:   if (simpleAssign((plExpr *)P(expr->left),(plExpr *)P(expr->right))) {
+                         ops = "=";    goto bi_op_lr;
+                       }
+                       ops = "ASSIGN"; goto bi_op2a1;
+      
+             bi_op_lr: dp->C()->printf("{");
+                       dp->setFlag(CGX_LHS);
+                       codegenExpr((plExpr *)P(expr->left),dp);
+                       dp->clrFlag(CGX_LHS);
+                       dp->C()->printf(ops);
+                       codegenExpr((plExpr *)P(expr->right),dp);
+                       dp->C()->printf(";}");
+                       break;
+ 
+    case OPR_B_NEG:    ops = "B_NEG";    goto uni_op1;
+    case OPR_L_NEG:    ops = "L_NEG";    goto uni_op1;
+    case OPR_UMINUS:   ops = "UMINUS";   goto uni_op1;
+
+              uni_op1: dp->C()->printf("Eval_%s(",ops);
+                       codegenExpr((plExpr *)P(expr->right),dp);
+                       dp->C()->printf(")");
+                       break;  
+      
+    case OPR_OR:       ops = "||";       goto bi_op2;
+
+    case OPR_CS_EQ:    ops = "CS_EQ";    goto bi_op2;
+    case OPR_CS_NE:    ops = "CS_NE";    goto bi_op2;
+    case OPR_L_NE:     ops = "L_NE";     goto bi_op2;
+    case OPR_L_EQ:     ops = "L_EQ";     goto bi_op2;
+    case OPR_L_OR:     ops = "L_OR";     goto bi_op2;
+    case OPR_L_AND:    ops = "L_AND";    goto bi_op2;
+    case OPR_B_EQ1:    ops = "B_EQ1";    goto bi_op2;
+    case OPR_B_EQ2:    ops = "B_EQ2";    goto bi_op2;
+    case OPR_B_OR:     ops = "B_OR";     goto bi_op2;
+    case OPR_B_AND:    ops = "B_AND";    goto bi_op2;
+    case OPR_B_XOR:    ops = "B_XOR";    goto bi_op2;
+
+    case OPR_LFT_SH:   ops = "LFT_SH";   goto bi_op2;
+    case OPR_RHT_SH:   ops = "RHT_SH";   goto bi_op2;
+
+    case OPR_MINUS:    ops = "MINUS";    goto bi_op2;
+    case OPR_PLUS:     ops = "PLUS";     goto bi_op2;
+    case OPR_MULTIPLY: ops = "MULTIPLY"; goto bi_op2;
+    case OPR_DIVIDE:   ops = "DIVIDE";   goto bi_op2;
+    case OPR_GT:       ops = "GT";       goto bi_op2;
+    case OPR_LT:       ops = "LT";       goto bi_op2;
+    case OPR_GE:       ops = "GE";       goto bi_op2;
+    case OPR_LE:       ops = "LE";       goto bi_op2;
+
+               bi_op2: dp->C()->printf("Eval_%s(",ops);
+		       dp->clrFlag(CGX_ALL);
+                       codegenExpr((plExpr *)P(expr->left),dp);
+                       dp->C()->printf(",");
+                       codegenExpr((plExpr *)P(expr->right),dp);
+		       dp->setFlag(cgx_flgs);
+                       dp->C()->printf(")");
+                       break;  
+             bi_op2a1: dp->C()->printf("Eval_%s(&(",ops);
+		       dp->clrFlag(CGX_ALL);
+                       dp->setFlag(CGX_LHS);
+                       codegenExpr((plExpr *)P(expr->left),dp);
+                       dp->C()->printf("),");
+                       codegenExpr((plExpr *)P(expr->right),dp);
+		       dp->setFlag(cgx_flgs);
+                       dp->C()->printf(")");
+                       break;  
+
+    case OPR_CAT:       ops = "CAT";     goto szd_bi_op2;
+
+         szd_bi_op2: { plExpr  *x1 = (plExpr *)P(expr->left),
+		               *x2 = (plExpr *)P(expr->right),
+                                tdx1,
+			        tdx2;
+                       int      w1 = 0,
+			        w2 = 0;
+                       if (x1) { exprBits(x1,&tdx1,dp);
+		                 w1 = tdx1.value.td.size;}
+                       if (x2) { exprBits(x2,&tdx2,dp);
+                                 w2 = tdx2.value.td.size;}
+	               char buff[MAX_STR_TYPE];
+                       cppType(w1 + w2,buff);
+                       if (dp->lhs()) {
+                         assert(0);
+		       } else {
+                         char cat[32];
+                         sprintf(cat,"Eval_%s(&_cat,&_p,%%d,",ops);
+                         dp->C()->printf("({_Var<%s> _cat; int _p = 0; ",buff);
+                         if (x1) {
+                           codegenExprCat(x1,dp,cat);
+                         }
+                         codegenExprCat(x2,dp,cat);
+                         dp->C()->printf(";_cat;})");
+                       }
+                     } break;  
+
+    case OPR_NCAT:   { plExpr tdx;
+                       exprBits((plExpr *)P(expr->right),&tdx,dp);
+                       int     w = tdx.value.td.size;
+                       plExpr  r_typ;
+                       ((BaseExpr *)&r_typ)->set(BX_INTEGER);
+                       int sts = evalExpr(dp->ip,(plExpr *)P(expr->left),&r_typ),
+                           n   = r_typ.value.u;
+	               char buff[MAX_STR_TYPE];
+                       cppType(n * w,buff);
+                       if (dp->lhs()) {
+                         assert(0);
+		       } else {
+                         dp->C()->printf("({_Var<%s> _ncat; Eval_NCAT(&_ncat,",buff);
+                         codegenExpr((plExpr *)P(expr->left),dp);
+                         dp->C()->printf(",%d,",w);
+                         codegenExpr((plExpr *)P(expr->right),dp);
+                         dp->C()->printf(");_ncat;})");
+		       }
+                     } break; 
+
+    case OPR_LIST2:    dp->C()->printf("&_NullArg[0],");
+                       goto list_r;
+    case OPR_LIST1:    codegenExpr((plExpr *)P(expr->left),dp);
+                       dp->C()->printf(",");
+                      list_r:
+                       codegenExpr((plExpr *)P(expr->right),dp);
+                       break;  
+
+    case OPR_NBA:    { plExpr *trg = (plExpr *)P(expr->left),
+                              *idx = 0;
+                       char    buff[MAX_STR_TYPE];
+                       switch (trg->typ) {
+                       case VT_OPERATOR:
+                         switch (trg->value.op) {
+                         case OPR_INDEX: idx = (plExpr *)P(trg->right);
+                                         trg = (plExpr *)P(trg->left);
+                         }
+                       }
+                       dp->C()->printf("{_SimTmp<%s> *_nba = _nba->allocate();",
+                                       TypeOf(trg,dp,buff));
+                       dp->C()->printf("_nba->set(");
+                       plExpr *val = (plExpr *)P(expr->right),
+			      *dly = 0;
+                       switch (val->typ) {
+                       case VT_OPERATOR:
+                         switch (val->value.op) {
+                         case OPR_DELAY: dly = (plExpr *)P(val->left);
+                                         val = (plExpr *)P(val->right);
+                         }
+		       }
+                       codegenExpr(val,dp);
+		       dp->C()->printf("); NBA(");
+		       dp->setFlag(CGX_PRT_ARG); 
+                       codegenExpr(trg,dp);
+		       dp->clrFlag(CGX_PRT_ARG);
+		       dp->C()->printf(",0,(void *)_nba,(PortAssFn)(");
+		       dp->setFlag(CGX_PRT_ASS); 
+                       codegenExpr(trg,dp);
+		       dp->clrFlag(CGX_PRT_ASS);
+                       dp->C()->printf("),({_SimTime t(_SCALE_TIME(");
+                       if (dly) {
+                         codegenExpr(dly,dp);
+                         dp->C()->printf(")); t;})");
+                       } else {
+                         dp->C()->printf("0)); t;})");
+		       }
+                       if (idx) {
+                       }
+                       dp->C()->printf(");}");
+                     } break;
+
+
+    case OPR_POSEDGE:  ops = "Posedge";  goto edg_func;
+    case OPR_NEGEDGE:  ops = "Negedge";  goto edg_func;
+    case OPR_ANYEDGE:  ops = "Anyedge";  goto edg_func;
+
+           edg_func: { eCGS scp = dp->scp;
+	               dp->scp  = CGS(scp|CGS_EDGE);
+                       dp->C()->printf("%s(%s",ops,xtra);
+		       dp->setFlag(CGX_PRT_ARG);
+                       codegenExpr((plExpr *)P(expr->right),dp);
+		       dp->clrFlag(CGX_PRT_ARG);
+                       dp->C()->printf(")");
+                       dp->scp  = scp;
+                     } break;
+
+    case OPR_CALL:   { int fti[2]; 
+                       *fti = 0;
+                       eCG typ = codegenExpr((plExpr *)P(expr->left),dp,fti);
+                       switch (typ) {
+                       case CG_FUNC: dp->clrFlag(CGX_ALL);
+			             codegenCall (typ,*fti,
+					   &P(mod_pool()->func)[*fti],
+					   (plExpr *)P(expr->right),dp);
+				     dp->clrFlag(cgx_flgs);
+                                     break;
+                       case CG_TASK: codegenCall (typ,*fti,
+					   &P(mod_pool()->task)[*fti],
+					   (plExpr *)P(expr->right),dp);
+                                     break;
+                       default:      assert(("NIY",0));
+                       }
+                       break; }
+
+    case OPR_SYS_CALL: {
+                       int fti[2];
+                       eCG typ = codegenExpr((plExpr *)P(expr->left),dp,fti);
+                       switch (typ) {
+                       case CG_SYS_FUNC: codegenSysCall(typ,(poolRef *)fti,
+					          (plExpr *)P(expr->right),dp);
+                                         break;
+                       case CG_SYS_TASK: codegenSysCall(typ,(poolRef *)fti,
+					          (plExpr *)P(expr->right),dp);
+                                         break;
+                       case CG_PLI_FUNC: codegenSysCall(typ,(poolRef *)fti,
+					          (plExpr *)P(expr->right),dp);
+                                         break;
+                       default:          assert(("NIY",0));
+                       }
+                       break; }
+    case OPR_SUB:      dp->C()->printf("(");
+                       codegenExpr((plExpr *)P(expr->right),dp);
+                       dp->C()->printf(")");
+                       break;
+    case OPR_EVENT:    dp->C()->printf("_Trigger(");
+                       codegenExpr((plExpr *)P(expr->right),dp);
+                       dp->C()->printf(")");
+                       break;
+
+    default:           assert(!"Expr code-gen");
+    }
+    dp->prnt_op = prnt_op;
+    break;    
+  default: assert(0);
+  }  
+
+  return CG_OK;
+
+ print_nm:
+  dp->C()->printf(nm_frmt,EscpdCname(nm),xtra);
+  return CG_OK;
+}
+
+eCG TemplatePoPool::codegenSysCall(eCG typ,poolRef *name,
+                                   plExpr *args,cgData *dp)
+{
+  plExpr *argl = args,
+         *argv;
+  int     n    = 0;
+
+  while (argl) {
+    switch (argl->typ) {
+    case VT_OPERATOR: switch(argl->value.op) {
+                      case OPR_LIST2:
+                      case OPR_LIST1: argv = (plExpr *)P(argl->left);
+                                      argl = (plExpr *)P(argl->right);
+                                      goto count;
+                      }
+    default:          argv = argl; argl = 0;
+    }
+  count:
+    n++;
+  }
+
+  dp->C()->printf("({ void *_arg[%d]; ",n);
+
+  const char *ass  = "",
+             *ret  = "";
+  int         mode = 0;
+
+  if (SYSFUNC_POOL == name->pool) switch (name->index) {
+  case SFN_TIME:   dp->C()->printf("_SimTime _tm; ");
+                   ass = "_tm="; ret = "_tm.val()";
+                   break;
+  case SFN_TYPEOF: mode = 1;
+                   ass = "const char *tn="; ret = "tn";
+                   break;
+  }
+
+  String        cs;
+  StringStream  tmp(&cs);
+  Stream       *svd_c = dp->Replace(CS_CODE,&tmp);
+  int           a     = 0;
+  String        tbuf;
+  for(argl = args ; argl ; a++) {
+    const char *pt = "U";
+    switch (argl->typ) {
+    case VT_OPERATOR: switch(argl->value.op) {
+                      case OPR_LIST2:
+                      case OPR_LIST1: argv = (plExpr *)P(argl->left);
+                                      argl = (plExpr *)P(argl->right);
+                                      goto eval;
+                      }
+    default:          argv = argl; argl = 0;
+    }
+  eval:
+    if (argv) {
+      switch (mode) {
+      case 1: { plExpr tdx;
+                exprBits(argv,&tdx,dp);
+		svd_c->printf("int arr[]={%d,%d,%d};",tdx.value.td.vt,
+                                                      tdx.value.td.indirect,
+			                              tdx.value.td.size);
+                cs.printf("arr");
+              } break;
+      default:  dp->setFlag(CGX_PLI_ARG);
+                codegenExpr(argv,dp);
+		dp->clrFlag(CGX_PLI_ARG);
+                break;
+      }
+    } else {
+      cs.printf("&_NullArg[0]");
+    }
+    svd_c->printf("%s_PLI_arg%s a%d(&_arg[%d],%s);",dp->dbg_nl,pt,a,a,cs.str());
+    cs.cut(0);
+  }
+  dp->Restore(CS_CODE,svd_c); 
+
+  dp->C()->printf("%sPushPliArgs(%d,_arg); %sSYS_CALL(%s,%d,_arg); PopPliArgs(); %s;})",
+                  dp->dbg_nl,a,ass,EscpdCname(*name),a,ret);
+}
+
+eCG TemplatePoPool::codegenCall(eCG typ,int idx,
+                                plPrtdObj *ft,plExpr *args,cgData *dp)
+{
+  plExpr     *argl = args,
+             *argv;
+  int         p    = ft->ports;
+  plPort     *prt0 = P(ft->port),
+             *prt  = prt0;
+  char        ctx[16];
+  const char *sep  = "; ";
+
+  switch (typ) {
+  case CG_TASK: sprintf(ctx,"_t_%d",idx);
+                break;
+  case CG_FUNC: sprintf(ctx,"_f_%d",idx);
+                sep  = ", ";
+                dp->C()->printf("(");
+                break;
+  }
+
+  for (; p-- > 0 ; prt++) {
+    if (!(prt->io & PRT_INOUT)) continue;
+    switch (argl->typ) {
+    case VT_OPERATOR: switch(argl->value.op) {
+                      case OPR_LIST1: argv = (plExpr *)P(argl->left);
+                                      argl = (plExpr *)P(argl->right);
+                                      goto in;
+                      }
+    default:          argv = argl; argl = 0;
+    }
+  in:
+    if (prt->io & PRT_IN) {
+      dp->C()->printf("%s.%s = ",ctx,EscpdCname(prt->name));
+      codegenExpr(argv,dp);
+      dp->C()->printf("%s%s ",sep,dp->dbg_nl);
+    }
+  }
+
+  if (CG_TASK == typ) {
+    dp->newSusp();
+    dp->P()->printf("C_ENTRY_POINT_FWD(proc%d_%d)(void *); C_ENTRY_POINT_DWF\n",
+                                  dp->Cntxt(),dp->Susp());
+    dp->C()->printf("_L_%d: "
+                    "{if (_master->Push(%s(_master,_master->Pop())) > 0) {"
+                                  " return Suspend(&_%s_%d,%d,proc%d_%d);}} ",
+                    dp->Susp(),EscpdCname(ft->name),
+                    dp->str(),dp->Cntxt(),dp->Susp(),dp->Cntxt(),dp->Susp());
+  } else {
+    dp->C()->printf("%s())",EscpdCname(ft->name));
+  }
+
+  p    = ft->ports;
+  prt  = prt0;
+  argl = args;
+
+  for (; p-- > 0 ; prt++) {
+    if (!(prt->io & PRT_INOUT)) continue;
+    switch (argl->typ) {
+    case VT_OPERATOR: switch(argl->value.op) {
+                      case OPR_LIST1: argv = (plExpr *)P(argl->left);
+                                      argl = (plExpr *)P(argl->right);
+                                      goto out;
+                      }
+    default:          argv = argl; argl = 0;
+    }
+  out:
+    if (prt->io & PRT_OUT) {
+      codegenExpr(argv,dp);
+      dp->C()->printf(" = %s.%s",ctx,EscpdCname(prt->name));
+      dp->C()->printf("; ");
+    }
+  }
+
+  return CG_OK;
+}
+
+eCG TemplatePoPool::codegenPorts(int n,plPort *p,cgData *dp)
+{
+  int i = 0,
+      pt;
+
+  for (; i < n ; i++,p++) {
+    int sgnd = ((pt = p->ptyp) & PT_SIGNED);
+    if (pt == PT_ALIAS) {
+
+    } else {
+      int     r      = 0;
+      char    pt[16] = "",
+             *tp     = pt;
+      Stream *svd_c  = dp->Replace(CS_CODE,dp->P()),
+             *svd_d  = dp->Replace(CS_DECL,dp->P()); 
+      if (p->pckd) {
+        plExprIref *rngs = (plExprIref *)P(p->rng);
+        dp->addCntxtC(dp->P(),"static const _simple_range ");
+        dp->P()->printf("pr_%s[%d] = {",
+                    EscpdCname(p->name),p->pckd);
+        for (; r < p->pckd ; r++) {
+          codegenExpr(P(rngs[r]),dp);
+        }
+        dp->P()->printf("};\n");
+      }
+      if (p->unpckd) {
+/*
+        sprintf(tp,"_U%d",p->unpckd);
+        tp += strlen(tp);
+*/
+        plExprIref *rngs = (plExprIref *)P(p->rng);
+        dp->addCntxtC(dp->P(),"static const _simple_range ");
+        dp->P()->printf("ur_%s[%d] = {",
+                    EscpdCname(p->name),p->unpckd);
+        for (; r < p->unpckd ; r++) {
+          codegenExpr(P(rngs[r]),dp);
+        }
+        dp->P()->printf("};\n");
+      }
+      dp->Restore(CS_DECL,svd_d); 
+      dp->Restore(CS_CODE,svd_c); 
+      const char *c    = "",
+	         *sgnd = "unsigned",
+                 *name;
+      int drvrs = 1;
+      if (dp->scp & (CGS_FUNC|CGS_TASK)) {
+        dp->C()->printf("  _Var%s<%s int,32,1> %s;\n    ",
+                        pt,sgnd,name = EscpdCname(p->name));
+      } else {
+        char buff_p[32],
+             buff_u[32];
+        dp->ip->cppPortType(i,buff_p,buff_u);
+        dp->C()->printf("  _Port%s<%s %s,%d> %s%s;\n    ",
+                        pt,sgnd,buff_p,drvrs,name = EscpdCname(p->name),buff_u);
+        dp->addCntxt(dp->I());
+        if (p->unpckd) {
+          dp->I()->printf("%s->init(",name);
+	} else {
+          dp->I()->printf("%s.init(",name);
+	}
+        dp->addCntxt(dp->I(),"&",",","(_Context *)0,");
+        dp->I()->printf("%d,",i);
+        if (p->io) {
+	  if (p->io & PRT_IN)        {dp->I()->printf("%sPRT_IN",c);        c = "|";}
+	  if (p->io & PRT_OUT)       {dp->I()->printf("%sPRT_OUT",c);       c = "|";}
+	  if (p->io & PRT_IO_LSTD)   {dp->I()->printf("%sPRT_IO_LSTD",c);   c = "|";}
+	  if (p->io & PRT_XPRTD)     {dp->I()->printf("%sPRT_XPRTD",c);     c = "|";}
+	  if (p->io & PRT_DSC_DFLTD) {dp->I()->printf("%sPRT_DSC_DFLTD",c); c = "|";}
+	  if (p->io & PRT_SCALARED)  {dp->I()->printf("%sPRT_SCALARED",c);  c = "|";}
+	  if (p->io & PRT_VECTORED)  {dp->I()->printf("%sPRT_VECTORED",c);  c = "|";}
+	  if (p->io & PRT_BRANCH)    {dp->I()->printf("%sPRT_BRANCH",c);    c = "|";}
+	  if (p->io & PRT_ALIASSED)  {dp->I()->printf("%sPRT_ALIASSED",c);  c = "|";}
+        }
+        if (!*c) dp->I()->printf("PRT_NC");
+      
+        if (p->pckd) {
+          dp->I()->printf(",%d,",p->pckd);
+          dp->addCntxtC(dp->I());
+          dp->I()->printf("pr_%s",name);
+        }
+        if (p->unpckd) {
+          dp->I()->printf(",%d,",p->unpckd);
+          dp->addCntxtC(dp->I());
+          dp->I()->printf("ur_%s",name);
+        }
+        dp->I()->printf(");\n");
+      }
+    }
+  }
+
+  return dp->sts;
+}
+
+eCG TemplatePoPool::codegenStmt(plStmtAny *s,cgData *dp)
+{
+  if (!s) {
+     dp->C()->printf("/*null*/;");
+     return CG_OK;
+  }
+
+  int file_id = s->Header.file_id,
+      line    = s->Header.line,
+      f_saved,
+      l_saved,
+      susp;
+
+  if (file_id == (f_saved = dp->file_id) &&
+      line    == (l_saved = dp->line)) {
+    file_id = -1;
+  } else {
+    poolRef *frf = P(file);
+    dp->C()->printf(dp->c_line_frmt,dp->line = line,
+                                    strDeref(frf[dp->file_id = file_id]));
+  }
+
+  eSTMT      st = (eSTMT)s->Header.typ;
+  plStmtAny *s2;
+
+  switch (st) {
+  case STMT_WAIT:   
+  case STMT_AT:     dp->newSusp(); susp = dp->Susp();
+                    if (dp->scp & CGS_TF) {
+                      dp->C()->printf("\t_L_%d: Sensitize(_master,_%s_%d_s); "
+                                               "if (%s(&_%s_%d,%d,_master,_Bool(",
+                                      susp,dp->str(),dp->Cntxt(),
+                                      STMT_WAIT == st ? "Wait"
+				                      : "At",
+                                      dp->str(),dp->Cntxt(),susp);
+                    } else {
+                      dp->P()->printf("C_ENTRY_POINT_FWD(proc%d_%d)(void *); C_ENTRY_POINT_DWF\n",
+                                      dp->Cntxt(),susp);
+                      dp->C()->printf("\t_L_%d: Sensitize(_master,_%s_%d_s); "
+                                               "if (%s(&_%s_%d,%d,proc%d_%d,_Bool(",
+                                      susp,dp->str(),dp->Cntxt(),
+                                      STMT_WAIT == st ? "Wait"
+				                      : "At",
+                                      dp->str(),dp->Cntxt(),susp,dp->Cntxt(),susp);
+                    }
+                    codegenExpr(P(s->At.expr),dp);
+                    dp->C()->printf("))) return %d; Desensitize(_master); ",
+                                                                         susp);
+	            if (s2 = P(s->At.child)) {
+                      codegenStmt(s2,dp);
+		    }
+                    break;
+  case STMT_DELAY:  dp->newSusp(); susp = dp->Susp();
+                    if (dp->scp & CGS_TF) {
+                      dp->C()->printf("\treturn Delay(&_%s_%d,%d,_master,({_SimTime t(_SCALE_TIME(",
+                                      dp->str(),dp->Cntxt(),susp);
+                    } else {
+                      dp->P()->printf("C_ENTRY_POINT_FWD(proc%d_%d)(void *); C_ENTRY_POINT_DWF\n",
+                                      dp->Cntxt(),susp);
+                      dp->C()->printf("\treturn Delay(&_%s_%d,%d,proc%d_%d,({_SimTime t(_SCALE_TIME(",
+                                      dp->str(),dp->Cntxt(),susp,dp->Cntxt(),susp);
+                    }
+                    codegenExpr(P(s->At.expr),dp);
+                    dp->C()->printf(")); t;})); _L_%d:;",susp);
+                    codegenStmt(P(s->At.child),dp);
+                    break;
+  case STMT_BLOCK:  dp->C()->printf("{");
+                    codegenStmts(s->Block.stmts,P(s->Block.stmt),dp);
+                    dp->C()->printf("}");
+                    break;
+  case STMT_EXPR:   codegenExpr(P(s->Expr.expr),dp);
+                    dp->C()->printf(";");
+                    break;
+  case STMT_FOR:    dp->fr_dpth++;
+                    codegenExpr(P(s->For.ass1),dp);
+                    dp->C()->printf("; for (;");
+                    codegenExpr(P(s->For.expr),dp);
+                    dp->C()->printf(";) {");
+                    codegenStmt(P(s->For.child),dp);
+                    dp->C()->printf(" _cont_%d: ",dp->fr_dpth);
+                    codegenExpr(P(s->For.ass2),dp);
+                    dp->C()->printf(";}");
+                    dp->fr_dpth++;
+                    break;
+  case STMT_REPEAT: if (dp->rpt++ >= dp->rpts) {
+                      dp->X()->printf("    int _rpt_%d;\n",++dp->rpts);
+                    }
+                    dp->C()->printf("  _%s_%d._rpt_%d = ",
+                                 dp->str(),dp->Cntxt(),dp->rpt);
+                    codegenExpr(P(s->Repeat.expr),dp);
+                    dp->C()->printf("; while(_%s_%d._rpt_%d--) {\n",
+                                 dp->str(),dp->Cntxt(),dp->rpt);
+                    codegenStmt(P(s->Repeat.child),dp);
+                    dp->C()->printf("}");
+                    break;
+  case STMT_IF:     dp->C()->printf(" if (");
+                    codegenExpr(P(s->If.expr),dp);
+                    dp->C()->printf(") {");
+                    codegenStmt(P(s->If.child_t),dp);
+		  { plStmtAny *els = P(s->If.child_f);
+		    if (els) {
+                      dp->C()->printf("} else {");
+                      codegenStmt(P(s->If.child_f),dp);
+		    }
+                    dp->C()->printf("}");
+                  } break;
+  default:          assert(0);
+  case STMT_FUNC_A:
+  case STMT_FUNC:
+  case STMT_INST:
+  case STMT_TASK:   break;
+  }
+
+  return CG_OK;
+}
+
+eCG TemplatePoPool::codegenLSPrfx(plExpr *expr,cgData *dp,int level)
+{
+  int         i;
+  poolRef     nm;
+  plStmtAny  *blk;
+  const char *frmt = level ? "%s"
+                           : "&(%s)";
+
+ retry:
+  if (expr) switch (expr->typ) {
+
+  case VT_ALIAS:  expr = P(expr->value.xpr); goto retry;
+
+  case VT_REFL:
+    switch (expr->rtyp) {
+    case REF_PORT: { plPort *p = &P(port)[expr->value.rrf.index];
+                     nm = p->name;
+                     if (p->unpckd) frmt = "%s";
+                     goto print_nm;
+                   } break;
+    default:         assert(0);
+    }
+    break;
+
+  case VT_OPERATOR:
+    switch (expr->value.op) {
+    default:
+      assert(0);
+    }  
+    break;
+
+  default:
+    assert(0);
+  }  
+  return CG_FAILED;
+
+ print_nm:
+  dp->C()->printf(frmt,EscpdCname(nm));
+  return CG_OK;
+}
+
+eCG TemplatePoPool::codegenUsage(int n,plUsage *usage,cgData *dp)
+{
+  String        cs;
+  StringStream  tmp(&cs);
+  Stream       *svd_c = dp->Replace(CS_CODE,&tmp);
+
+  for (; n-- > 0 ; usage++) {
+    eUSG    use = (eUSG)usage->use;
+    plExpr *xpr = P(usage->xpr); 
+
+    codegenLSPrfx(xpr,dp);
+    dp->I()->printf("   PortUsage%s(&_%s_%d_s,%s,",
+                                    'd' == *dp->str() ? "Auto"
+		                                      : "",
+                                    dp->str(),dp->Cntxt(),cs.str());
+    const char *sep = ""; 
+    if (use & USG_DRIVEN)  {dp->I()->printf("%sUSG_DRIVEN", sep); sep = "|";}
+    if (use & USG_SENSE)   {dp->I()->printf("%sUSG_SENSE",  sep); sep = "|";}
+    if (use & USG_READ)    {dp->I()->printf("%sUSG_READ",   sep); sep = "|";}
+    if (use & USG_CONTRIB) {dp->I()->printf("%sUSG_CONTRIB",sep); sep = "|";}
+    if (use & USG_PROBE)   {dp->I()->printf("%sUSG_PROBE",  sep); sep = "|";}
+    if (use & USG_A_READ)  {dp->I()->printf("%sUSG_A_READ", sep); sep = "|";}
+    if (use & USG_TO_GRND) {dp->I()->printf("%sUSG_TO_GRND",sep); sep = "|";}
+    if (use & USG_FLOW)    {dp->I()->printf("%sUSG_FLOW",   sep); sep = "|";}
+    dp->I()->printf(");\n");
+    cs.cut(0);
+  }
+
+  dp->Restore(CS_CODE,svd_c);
+
+  return CG_OK;
+}
+
+eCG TemplatePoPool::codegenStmts(int n,plStmtAny *s,cgData *dp)
+{
+  String        cs;
+  StringStream  tmp(&cs);
+  Stream       *svd_c;
+  int           i;
+
+  for (; n-- >0 ; s++) switch (s->Header.typ) {
+  case STMT_INITIAL: {
+    plStmtInit *si = (plStmtInit *)s;
+    dp->newCntxt("i");
+    dp->P()->printf("C_ENTRY_POINT_FWD(proc%d_%d)(void *); C_ENTRY_POINT_DWF\n",
+                    dp->Cntxt(),dp->newSusp());
+    dp->X()->printf("  class _context_%d : public _Context { public:\n",
+                    dp->Cntxt());
+    svd_c = dp->Replace(CS_CODE,&tmp);
+    codegenStmt(P(s->Always.child),dp);
+    dp->Restore(CS_CODE,svd_c);
+    dp->X()->printf("  } _i_%d;\n",dp->Cntxt());
+    dp->C()->printf("  _Sense *_i_%d_s;\n",dp->Cntxt());
+    dp->I()->printf("  _i_%d_s = 0;\n",dp->Cntxt());
+    dp->C()->printf("  inline int _proc_%d(_Context *const _master,int _L) {\n"
+                    "    static const void *_resume[] = {&&_L_0",
+                    dp->Cntxt(),dp->Cntxt());
+    for (i = 1; i <= dp->Susp() ; i++) {
+      dp->C()->printf(",&&_L_%d",i);
+    }
+    dp->C()->printf("};\n    _RESUME(this,_L); _L_0:;\n");
+    dp->C()->printf("  %s\n  }\n\n",cs.str());
+    cs.cut(0);
+    codegenUsage(si->usages,P(si->usage),dp);
+  } break;
+  case STMT_ALWAYS: {
+    plStmtAlways *sa = (plStmtAlways *)s;
+    dp->newCntxt("a");
+    dp->P()->printf("C_ENTRY_POINT_FWD(proc%d_%d)(void *); C_ENTRY_POINT_DWF\n",
+                    dp->Cntxt(),dp->newSusp());
+    dp->X()->printf("  class _context_%d : public _Context { public:\n",
+                    dp->Cntxt());
+    svd_c = dp->Replace(CS_CODE,&tmp);
+    codegenStmt(P(sa->child),dp);
+    dp->Restore(CS_CODE,svd_c);
+    dp->X()->printf("  } _a_%d;\n",dp->Cntxt());
+    dp->C()->printf("  _Sense *_a_%d_s;\n",dp->Cntxt());
+    dp->I()->printf("  _a_%d_s = 0;\n",dp->Cntxt());
+    dp->C()->printf("  inline int _proc_%d(_Context *const _master,int _L) {\n"
+                    "    static const void *_resume[] = {&&_L_0",
+                    dp->Cntxt(),dp->Cntxt());
+    for (i = 1; i <= dp->Susp() ; i++) {
+      dp->C()->printf(",&&_L_%d",i);
+    }
+    dp->C()->printf("   };\n    _RESUME(this,_L); _L_0:;\n");
+    dp->C()->printf("  %s\n\n    goto _L_0;\n  }\n\n",cs.str());
+    cs.cut(0);
+    codegenUsage(sa->usages,P(sa->usage),dp);
+  } break;
+  case STMT_ASSIGN: {
+    plStmtAssign *sa = (plStmtAssign *)s;
+    dp->newCntxt("d");
+    dp->P()->printf("C_ENTRY_POINT_FWD(proc%d_%d)(void *); C_ENTRY_POINT_DWF\n",
+                    dp->Cntxt(),dp->newSusp());
+    dp->P()->printf("C_ENTRY_POINT_FWD(proc%d_%d)(void *); C_ENTRY_POINT_DWF\n",
+                    dp->Cntxt(),dp->newSusp());
+    dp->X()->printf("  class _context_%d : public _Context { public:\n",
+                    dp->Cntxt());
+    svd_c = dp->Replace(CS_CODE,&tmp);
+    codegenExpr(P(sa->expr),dp);
+    dp->Restore(CS_CODE,svd_c);
+    dp->X()->printf("  } _d_%d;\n",dp->Cntxt());
+    dp->C()->printf("  _Sense *_d_%d_s;\n",dp->Cntxt());
+    dp->I()->printf("  _d_%d_s = 0;\n",dp->Cntxt());
+    dp->C()->printf("  inline int _proc_%d(_Context *const _master,int _L) {\n"
+                    "    static const void *_resume[] = {&&_L_0",
+                    dp->Cntxt(),dp->Cntxt());
+    for (i = 1; i <= dp->Susp() ; i++) {
+      dp->C()->printf(",&&_L_%d",i);
+    }
+    dp->C()->printf("   };\n    _RESUME(this,_L); _L_0:;\n"
+                    "   Sensitize(_master,_d_%d_s); goto reset; _L_1:;\n"
+                    "  %s;\n reset: _master->lbl = 1;"
+                     " _master->call = proc%d_1;}\n\n",  
+                    dp->Cntxt(),cs.str(),dp->Cntxt());
+    cs.cut(0);
+    codegenUsage(sa->usages,P(sa->usage),dp);
+  } break;     
+  default:
+    codegenStmt(s,dp);
+    break;
+  }
+
+  return CG_OK;
+}
+
+eCG TemplatePoPool::codegenTask(int n,plPrtdObj *ft,cgData *dp,int _auto)
+{
+  String       s1;
+  StringStream cd(&s1);
+  Stream       *svd_c;
+  eCG          sts;
+  eCGS         svd_scp = dp->scp;
+  int          i,
+               t       = 0,
+               l       = dp->cntxt_ln;
+  char        *np;
+
+  dp->scp  = CGS(CGS_TASK|svd_scp);
+
+  for (; t < n ; t++,ft++) {
+    dp->newCntxt("t",t);
+    dp->newSusp();
+    dp->C()->printf("  class _t_cntxt_%d : public _Context { public:\n",t);
+    sprintf(np = &dp->cntxt_nm[l],"%s_t_%d",l ? "."
+                                               : "", t);
+    dp->cntxt_ln = l + strlen(np);
+    dp->I()->printf("   %s.data.c.typ = SCT_TASK; %s.idx = %d;\n",np,np,t);
+    sts   = codegenPorts(ft->ports,P(ft->port),dp);
+    svd_c = dp->Replace(CS_CODE,&cd);
+    sts   = codegenStmts(ft->stmts,P(ft->stmt),dp);
+    dp->Restore(CS_CODE,svd_c);
+    dp->C()->printf("  } %s;\n  _Sense *_t_%d_s;\n"
+                    "  /* Task */ inline int %s (_Context *_master,"
+                                                        "int _L = 0",
+                 np,dp->Cntxt(),
+                 EscpdCname(ft->name));
+    dp->I()->printf("  _t_%d_s = 0;\n",dp->Cntxt());
+    dp->C()->printf(") {\n"
+                 "    static void *_resume[] = {&&_L_0");
+    for (i = 1; i <= dp->Susp() ; i++) {
+      dp->C()->printf(",&&_L_%d",i);
+    }
+    dp->C()->printf("  };\n    _RESUME(this,_L); _L_0:;\n");
+    dp->C()->printf("%s\n  return 0;\n}\n\n",s1.str());
+    s1.cut(0);
+    codegenUsage(ft->usages,P(ft->usage),dp);
+  }
+
+  dp->scp                        = svd_scp;
+  dp->cntxt_nm[dp->cntxt_ln = l] = '\0';
+
+  return sts;
+}
+
+eCG TemplatePoPool::codegenFunc(int n,plPrtdObj *ft,cgData *dp,int _auto)
+{
+  String       s1;
+  StringStream cd(&s1);
+  Stream       *svd_c;
+  eCG          sts;
+  eCGS         svd_scp = dp->scp;
+  int          i,
+               t       = 0,
+               l       = dp->cntxt_ln;
+  char        *np;
+
+  dp->scp  = CGS(CGS_FUNC|svd_scp);
+
+  for (; t < n ; t++,ft++) {
+    char rt[32];
+    strcpy(rt,"_Var<unsigned int,32,1>");
+    dp->newCntxt("f",t);
+    dp->newSusp();
+    dp->C()->printf("  class _f_cntxt_%d : public _Context { public:\n",t);
+    dp->C()->printf("   %s %s;\n",rt,strDeref(ft->name));
+    sprintf(np = &dp->cntxt_nm[l],"%s_f_%d",l ? "."
+                                               : "", t);
+    dp->cntxt_ln = l + strlen(np);
+    dp->I()->printf("   %s.data.c.typ = SCT_FUNC; %s.idx = %d;\n",np,np,t);
+    sts   = codegenPorts(ft->ports,P(ft->port),dp);
+    svd_c = dp->Replace(CS_CODE,&cd);
+    sts   = codegenStmts(ft->stmts,P(ft->stmt),dp);
+    dp->Restore(CS_CODE,svd_c);
+    dp->C()->printf("  } %s;\n"
+                    "  /* Func */ inline %s &%s () {\n",
+		    np,rt,EscpdCname(ft->name));
+    dp->C()->printf("%s\n  return %s.%s;\n}\n\n",
+                    s1.str(),dp->cntxt_nm,strDeref(ft->name));
+    s1.cut(0);
+  }
+
+  dp->scp                        = svd_scp;
+  dp->cntxt_nm[dp->cntxt_ln = l] = '\0';
+
+  return sts;
+}
+

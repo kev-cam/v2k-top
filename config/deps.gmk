@@ -1,0 +1,52 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: deps.gmk,v 1.18 2010/05/02 21:17:18 dkc Exp $
+ 
+
+
+$(OBJ_DIR)/deps.gmk: $(OBJ_DIR)/cdeps.gmk $(OBJ_DIR)/cxxdeps.gmk all.gmk
+	@echo "Making $@";\
+         (echo "include $(OBJ_DIR)/cdeps.gmk" ;\
+	  echo "include $(OBJ_DIR)/cxxdeps.gmk";\
+	  echo "include $(OBJ_DIR)/hdrdeps.gmk") > $@
+
+$(OBJ_DIR)/cdeps.gmk: $(C_FILES) all.gmk
+	cdeps -od=$(OBJ_DIR) $(C_FILES) > $@
+
+$(OBJ_DIR)/cxxdeps.gmk: $(CXX_FILES) all.gmk
+	cxxdeps -od=$(OBJ_DIR) $(CXX_FILES) > $@
+
+MKDEPS_DEFS=-DCPP_ONLY
+
+CDEP_RULES=1
+$(OBJ_DIR)/%.c-dep::%.c
+	mkdeps  $(MKDEP_ARGS)\
+		-cmd="$(C_MK_DEPS) $(MKDEPS_DEFS)"\
+		-in=$< -out=$@ -obj_dir=$(OBJ_DIR)\
+		-obj=$(subst .c-dep,$(CMODE)$(OBJ),$@)\
+		-cmode=$(CMODE)$(OBJ_PRFX)\
+		-inc="$(C_INCLUDES) $(C_INCLUDES_2)"
+
+CXXDEP_RULES=1
+$(OBJ_DIR)/%.cpp-dep::%.cpp
+	mkdeps  $(MKDEP_ARGS)\
+		-cmd="$(CXX_MK_DEPS) $(MKDEPS_DEFS)"\
+		-in=$< -out=$@ -obj_dir=$(OBJ_DIR)\
+		-obj=$(subst .cpp-dep,$(CMODE)$(OBJ),$@)\
+		-cmode=$(CMODE)$(OBJ_PRFX)\
+		-inc="$(C_INCLUDES) $(C_INCLUDES_2)"
+
+
+%/$(OBJ_DIR)/hdrdeps.gmk:
+	cd $(subst $(OBJ_DIR)/hdrdeps.gmk,,$@) ;\
+		$(MK_SCRIPT) -env $(MK_FLAGS) -fast obj_dir $(OBJ_DIR)/hdrdeps.gmk
+
+$(OBJ_DIR)/hdrdeps.gmk: all.gmk
+	defdeps > $@
+
+../include/$(OBJ_DIR)/deps.gmk:
+	cd ../include ; \
+		$(MK_SCRIPT) -env $(MK_FLAGS) -fast $(MAKE_SUB_ARGS) $(OBJ_DIR)/deps.gmk
+
+$(OBJ_DIR)/odefs.gmk: all.gmk
+	mko $(C_FILES) $(CXX_FILES) > $@

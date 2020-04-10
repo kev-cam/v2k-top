@@ -1,0 +1,34 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.6 2009/07/14 18:06:17 dkc Exp $
+ 
+
+
+default: all
+
+PCXX_FILES=
+CXX_FILES =sim.cpp arith.cpp
+C_FILES   =
+
+V2KSIM_LIB_OBJ=$(O_FILES)
+
+OTHER_SHARED=common languages
+
+ifndef CONFIG_DIR
+CONFIG_DIR=$(HOME)/$(PROJECT)-$(VERSION)/config
+endif
+
+include $(CONFIG_DIR)/common.gmk
+
+ifndef IGNORE_DEPS
+include $(OBJ_DIR)/deps.gmk
+include ../include/$(OBJ_DIR)/hdrdeps.gmk
+endif
+
+ifndef SETUP
+include $(OBJ_DIR)/autolib.gmk
+endif
+
+all: lib_v2ksim
+	@echo "Built Models Library - $(V2KSIM_LIB)"
+

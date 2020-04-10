@@ -1,0 +1,54 @@
+// Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+// Distributed under the GNU Lesser General Public License
+// RCS ID: $Id: TemplateModulePool.vfn,v 1.15 2009/07/08 08:36:17 dkc Exp $
+ 
+
+
+virtual void            Init(Module *);
+virtual void            Load(Module *);
+virtual int             plSaveUnknown(XREF(plUnknown),Unknown *);
+virtual long            plSaveStmt(XREF(plStmtAny),Stmt *);
+virtual void            plSaveStmtAnalog(XREF(plStmtAnalog),StmtAnalog *);
+virtual void            plSaveStmtBlock(XREF(plStmtBlock),StmtBlock *);
+virtual void            plSaveStmtFor(XREF(plStmtFor),StmtFor *);
+virtual void            plSaveStmtGen(XREF(plStmtGen),StmtGen *);
+virtual void            plSaveStmtIf(XREF(plStmtIf),StmtIf *);
+virtual void            plSaveStmtIfNone(XREF(plStmtIfNone),StmtIfNone *);
+virtual void            plSaveStmtCase(XREF(plStmtCase),StmtCase *);
+virtual void            plSaveStmtCaseX(XREF(plStmtCaseX),StmtCaseX *);
+virtual void            plSaveStmtCaseZ(XREF(plStmtCaseZ),StmtCaseZ *);
+virtual void            plSaveStmtDefparam(XREF(plStmtDefparam),StmtDefparam *);
+virtual void            plSaveStmtAlways(XREF(plStmtAlways),StmtAlways *);
+virtual void            plSaveStmtForever(XREF(plStmtForever),StmtForever *);
+virtual void            plSaveStmtSpec(XREF(plStmtSpec),StmtSpec *);
+virtual void            plSaveStmtFork(XREF(plStmtFork),StmtFork *);
+virtual void            plSaveStmtRepeat(XREF(plStmtRepeat),StmtRepeat *);
+virtual void            plSaveStmtWhile(XREF(plStmtWhile),StmtWhile *);
+virtual void            plSaveStmtAssign(XREF(plStmtAssign),StmtAssign *);
+virtual void            plSaveStmtDeassign(XREF(plStmtDeassign),StmtDeassign *);
+virtual void            plSaveStmtDisable(XREF(plStmtDisable),StmtDisable *);
+virtual void            plSaveStmtForce(XREF(plStmtForce),StmtForce *);
+virtual void            plSaveStmtRelease(XREF(plStmtRelease),StmtRelease *);
+virtual void            plSaveStmtWait(XREF(plStmtWait),StmtWait *);
+virtual void            plSaveStmtAt(XREF(plStmtAt),StmtAt *);
+virtual void            plSaveStmtDelay(XREF(plStmtDelay),StmtDelay *);
+virtual void            plSaveStmtEvent(XREF(plStmtEvent),StmtEvent *);
+virtual void            plSaveStmtInst(XREF(plStmtInst),StmtInst *);
+virtual void            plSaveStmtTask(XREF(plStmtTask),StmtTask *);
+virtual void            plSaveStmtFunc(XREF(plStmtFunc),StmtFunc *);
+virtual void            plSaveStmtFuncA(XREF(plStmtFuncA),StmtFuncA *);
+virtual void            plSaveStmtQC(XREF(plStmtQC),StmtQC *);
+virtual void            plSaveStmtDecl(XREF(plStmtDecl),StmtDecl *);
+virtual void            plSavePrtdObj(XREF(plPrtdObj),PrtdObj *,poolRef,long,Stmt *,Stmt *);
+virtual void            plSaveScope(XREF(plScope),Scope *);
+virtual void            plSaveBranch(XREF(plBranch),Branch *);
+virtual void           *forAllStmts(Module *,StmtCallBackFn,void *,int);
+virtual void            evalDfPrm(Module *,Inst *,int);
+virtual Inst           *locateRef(Inst *,plExpr *,XmrData *,eXMR);
+virtual poolRef         fileName(int);
+virtual int             findImr(Inst *,int,poolRef *,XmrData *);
+virtual poolRef         itemName(eREF,int);
+virtual eREF            unkRefType(int);
+virtual eCG             codegen(Inst *,Module *,Stream *,Stream *,eCodeMode);
+virtual void            mapFunc(rrfTup *,rrfTup *);
+virtual void            mapTask(rrfTup *,rrfTup *);

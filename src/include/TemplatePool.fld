@@ -1,0 +1,29 @@
+/* Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: $Id: TemplatePool.fld,v 1.20 2003/01/14 02:26:06 dkc Exp $ */
+  
+
+
+#ifdef PAD_POINTER
+char          pad_vfp[PAD_POINTER];
+#endif
+char          order[8];
+void         *self;
+#ifdef PAD_POINTER
+char          pad_self[PAD_POINTER];
+#endif
+short         major_version;
+short         minor_version;
+ePM           pmode;
+eFM           fmode;
+int           mngr_indx;
+int           ownr_prcss;
+int           ownr_thrd;
+long          pool_size;
+long          free_word;
+long          free_block;
+long          data_start;
+long          data_end;
+IREF(char)    blk_flgs;
+IREF(plStr)   daisy;
+IREF(plStr)   file;  /* save or map */

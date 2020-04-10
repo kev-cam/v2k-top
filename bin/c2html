@@ -1,0 +1,209 @@
+#!/usr/bin/perl -s
+# Copyright (c) 1998,2001 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: c2html,v 1.10 2007/02/04 01:38:24 dkc Exp $
+ 
+
+if (!defined($hdir)) {
+    $hdir = "html";
+}
+
+if (defined($incl)) {
+    @ifiles = split / -I/," $incl";
+    shift @ifiles;
+}
+
+if (defined $in) {
+    open(STDIN,"$in");
+}
+
+if (defined $out) {
+    open(STDOUT,">$out");
+    if (defined $in && defined $indx) {
+	$_ = $out;
+	s/\.htm.*/.indx/;
+	open(INDEX,">$_");
+        print INDEX "\f\n$in,\n";
+    }
+}
+
+print "<html>\n",
+      "<title>$in</title>\n",
+      '<body bgcolor="#ffffff" TEXT="#000000" link="#ff5f7f" alink="#ff0000" vlink="#2fcf5f">',
+      "\n";
+
+print "<pre>\n";
+print "<code>\n";
+
+$in_rtn  = 0;
+$line_no = 0;
+
+while (<>) {
+
+    $line_no++;
+
+    print  "<a name=\"$line_no\" href=\"${cgi}edit.cgi?line=$line_no&file=$in\" target=_new><b>";
+    printf "%4d",$line_no;
+    print  '&gt; </b></a>';
+
+    if    (/^{/) {$in_rtn  =  1;
+                  $#labels = -1;}
+    elsif (/^}/) {$in_rtn  =  0;}
+
+#    if (!$in_rtn && /{\n/
+#                 && !(/class/ || /typedef/ || /struct/ || /=/ 
+#                              || /switch/ || /extern "C" {/))
+#    {
+#      print STDERR "??? $in:$line_no - $_";
+#    }
+
+    if (/^# *include/) {
+        chomp;
+        $line = $_;
+        if (/<.*>/) {
+	    $_ = $&;
+            s/>//;
+            print '<a href="/usr/include/',substr($_,1),'">#include &lt;',
+                                           substr($_,1),"&gt;</a>\n";
+        } elsif (/".*"/) {
+	    $_ = $&;
+            s/"//g;
+#"
+            $dir = "";
+            $f   = $_;
+            SCAN: foreach $d (@ifiles) {
+                $dir = $d;
+                if ( -f "$dir/$f") {
+#                   print STDERR "$f @ $dir\n";
+                    if ("." eq $dir) {
+                        $_ = "$f.html";
+                    } else {
+                        $_ = "$dir/$hdir/$f.html";
+                    }
+                    last SCAN;
+                }
+            }
+            print '<a href="',$_,'">',$line,"</a>\n";
+            if ($recurse && ! -f $_) {
+                if ("" eq $dir) {$dir = ".";} 
+                $_ = "$hdir/$f.html";
+                s+//+/+g;
+                `$ENV{MK_SCRIPT} $ENV{MK_FLAGS} -cd $dir $_`;
+            }
+        } else {
+            print $_;
+	}
+    } elsif (/class/) {
+        $line = $_;
+        @flds = split / |:|;/;
+        $i    = 0;
+        while ("class" ne $flds[$i++] && $i <= $#flds) {}
+#       print STDERR "$line -> class $flds[$i]\n";
+        $cls =  $flds[$i];
+        $_   =  $cls;
+        tr/[A-Z]/[a-z]/;
+        $href = '<a href="'."$doxy/class$cls-members.html".'">'.$cls.'</a>';
+        $_ = $line;
+        s/ $cls/ $href/;
+        print $_;
+    } elsif (/::/) {
+        $line = $_;
+        s/::/ :: /g;
+        s/  / /g;
+        @flds = split / |\*|\(|\[/;
+        $i    = 0;
+        while ("::" ne $flds[$i+1] && $i <= $#flds) {$i++;}
+#       print STDERR "$line -> class $flds[$i], routine $flds[$i+2]\n";
+        $cls =  $flds[$i];
+        $rtn =  $flds[$i+2];
+        $_   =  $cls;
+        tr/[A-Z]/[a-z]/;
+        $href = '<a href="'."$doxy/class$cls-members.html".'">'.$cls.'</a>';
+        $_ = $line;
+        s/$cls/$href/;
+        $rtn_nm = "$cls-$rtn";
+        print INDEX "$cls\:\:$rtn($line_no,\n";
+        if (/\:\:\w*\(/ && $& eq "::$rtn(") {
+          $href = '<a name="'."$rtn_nm".'">'.$rtn.'</a>';
+          s/\:\:$rtn/::$href/;
+        }
+        print $_;
+    } elsif ($in_rtn && /goto/) {
+        $line = $_;
+        @flds = split / |:|;/;
+        $i    = 0;
+        while ("goto" ne $flds[$i++] && $i <= $#flds) {}
+#       print STDERR "$line -> label $flds[$i]\n";
+        $gto =  $flds[$i];
+        $_   =  $gto;
+        $href = '<a href="#'."$rtn_nm-$gto".'">'.$gto.'</a>';
+        $_ = $line;
+        s/ $gto/ $href/;
+        print $_;        
+    } elsif ($in_rtn && /:/ && !/case/ && !/default/ && !/".*:.*"/) {
+        $line = $_;
+        s/:/ __targ/;
+        @flds = split;
+        $i    = 0;
+        while ("__targ" ne $flds[$i+1] && $i <= $#flds) {$i++;}
+#       print STDERR "$line -> target $flds[$i] ($i,$#flds)\n";
+        $lbl =  $flds[$i];
+        $_   =  $lbl;
+        $href = '<a name="'."$rtn_nm-$lbl".'">'.$lbl.'</a>';
+        $_ = $line;
+        s/$lbl/$href/;
+        print $_;
+    } elsif (!$in_rtn && /\(/) {
+        $line = $_;
+        s/\(.*//;
+        split;
+        $rtn_nm = $_[$#_]; 
+#       print STDERR "ROUTINE: $rtn_nm\n";
+        print INDEX "extern \"C\" $rtn_nm($line_no,\n";
+        $href = '<a name="'."$rtn_nm".'">'.$rtn_nm.'</a>';
+        $_ = $rtn_nm;
+        s/\*/\\*/; 
+        $repl = $_;
+        $_    = $line;
+        s/$repl/$href/;
+        print $_;
+    } elsif (/typedef *enum *\/.*{/) {
+        $line = $_;
+        $_    = $&;
+        if (/\*.*\*/) {
+            $_ = $&;
+            s/ |\*//g;
+#           print STDERR "ENUM: $_\n";
+            $enum = $_;
+            $_    = $line;
+            $href ='<a name="'.$enum.'">'.$enum."</a>";
+            s/$enum/$href/;
+        } else {
+            $_    = $line;
+        }
+        print $_;
+    } elsif (/typedef *struct *\/.*{/) {
+        $line = $_;
+        $_    = $&;
+        if (/\*.*\*/) {
+            $_ = $&;
+            s/ |\*//g;
+#           print STDERR "STRUCT: $_\n";
+            $strct = $_;
+            tr/[A-Z]/[a-z]/;
+            $href  ='<a href="'."$doxy/struct$strct.html".
+                      '" name="'.$strct.'">'.$strct."</a>";
+            $_     = $line;
+            s/$strct/$href/;
+        } else {
+            $_    = $line;
+        }
+        print $_;
+    } else {
+        print $_;
+    }
+}
+
+print "</code>\n";
+print "</pre>\n";
+print "</html>\n";

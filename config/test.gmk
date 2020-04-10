@@ -1,0 +1,111 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: test.gmk,v 1.10 2003/10/22 08:07:07 dkc Exp $
+ 
+
+
+RSLT_DIR=$(USER)-$(OBJ_DIR)
+
+ifndef DUMP
+DUMP=mu
+endif
+
+rdir:
+	@if [ ! -d $(RSLT_DIR) ] ; then mkdir $(RSLT_DIR) ; fi
+
+ifndef V_DESIGN
+
+ifndef LST_TARG
+LST_TARG=-elab $(USR_LST_TARG)
+endif
+ifndef FRST_TARG
+FRST_TARG=-portmode=wxd -unmatched=yes $(TST_XTRA_ARG) $(USR_FRST_TARG) 
+endif
+
+ifndef TESTS
+TESTS:=$(wildcard $(TEST_SRC_DIR)*.$(FILE_TYPE))
+endif
+
+ifndef TEST_SUMMARY
+TEST_SUMMARY:=$(PROJECT_ROOT)/$(PROJECT)-tests/$(USER)-$(OBJ_DIR).fld
+endif
+
+DMP=$(patsubst %.$(FILE_TYPE),$(RSLT_DIR)/%.dmp,$(TESTS))
+
+$(RSLT_DIR)/%.dmp::%.$(FILE_TYPE)
+	@echo Test: $$PWD/$(patsubst $(RSLT_DIR)/%.dmp,%.$(FILE_TYPE),$@)
+	@if [ ! -d `dirname $@` ] ; then mkdir `dirname $@` ; fi
+	@eval $(SYS_LP)=$$$(SYS_LP):$(OBJ_LIB_DIR) ; export $(SYS_LP);\
+	     $(MK_DEBUGGER) $(OBJ_EXE_DIR)/v2k $(FRST_TARG) -vdmp=$(DUMP)\
+		 $< $(LST_TARG) >$@-tmp 2>$(subst .dmp,.log,$@) ;\
+	 sts=$$? ;\
+	 if [ 0 = $$sts -o -f $(patsubst $(RSLT_DIR)/%.dmp,%,$@).fls ] ; then\
+		mv $@-tmp $@ ;\
+         else\
+	 	echo "Failed ($$sts)";\
+	 	echo "Failed ($$sts):" $$PWD/$(patsubst $(RSLT_DIR)/%.dmp,%.$(FILE_TYPE),$@) >> $(TEST_SUMMARY);\
+	 	exit $$sts ;\
+	 fi
+
+else
+
+ifndef LST_TARG
+LST_TARG=-elab $(SDF_FILES) $(USR_LST_TARG)
+endif
+ifndef FRST_TARG
+FRST_TARG=$(TST_XTRA_ARG) $(USR_FRST_TARG)
+endif
+
+$(RSLT_DIR)/$(V_DESIGN).dmp: $(V_DESIGN_FILES)
+	@echo Test dir: $$PWD/$(V_DESIGN)
+	@eval $(SYS_LP)=$$$(SYS_LP):$(OBJ_LIB_DIR) ; export $(SYS_LP);\
+	  $(MK_DEBUGGER) $(OBJ_EXE_DIR)/v2k $(FRST_TARG) -vdmp=$(DUMP) $(V_DESIGN_FILES)\
+	    $(LST_TARG) >$@-tmp 2>$(subst .dmp,.log,$@) ;\
+	  sts=$$? ;\
+	 if [ 0 = $$sts -o -f $(V_DESIGN).fls ] ; then\
+		mv $@-tmp $@ ;\
+         else\
+		echo "Failed ($$sts)";\
+	 	echo "Failed ($$sts):" $$PWD/$(patsubst $(RSLT_DIR)/%.dmp,%.$(FILE_TYPE),$@) >> $(TEST_SUMMARY);\
+		exit $$sts ;\
+	 fi
+
+DMP=$(RSLT_DIR)/$(V_DESIGN).dmp
+
+endif
+
+diff:
+	testcmp -dir=$$PWD -rslt_dir=$(RSLT_DIR) -gold_dir=Gold -user=$(USER)\
+		$(TESTCMP_FLAGS)
+
+gold:
+	@if [ ! -d Gold ] ; then mkdir Gold;\
+			    else chmod +w Gold;\
+				 rm -fr Gold/v2k Gold/$(USER)-gold ; fi
+	@mv v2k         Gold;\
+	 mv $(RSLT_DIR) Gold/$(USER)-gold;\
+	 chmod -w Gold;\
+	 echo "Archived: $$PWD" `ls Gold`
+
+more_logs:
+	more $(RSLT_DIR)/*.log
+
+cat_logs:
+	cat $(RSLT_DIR)/*.log
+
+tst_cln:
+	rm -fr *-cache core $(RSLT_DIR)/* .*-done $(TST_CLN_EXTRA)
+
+TST_CLN: tst_cln
+	rm -fr v2k
+
+dmp: rdir $(DMP)
+	echo Done
+
+quick: tst_cln $(DMP)
+
+show_tsts:
+	@echo $(TESTS)
+
+show_dmp:
+	@echo $(DMP)

@@ -1,0 +1,10 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: token.gmk,v 1.15 2007/10/09 21:26:09 dkc Exp $
+
+%-t.cpp %-i.c $(INC_DIR)/%-i.h %-t.h $(INC_DIR)/%-t.h:%.tdf
+	@echo For: $? in $$PWD
+	mktkc -lib=$(SYS_LIB_DIR)\
+              -language=$(subst .tdf,,$<)\
+	      -include=$(INC_DIR)\
+              -info=$(INC_DIR)/fxd_pool.h < $<

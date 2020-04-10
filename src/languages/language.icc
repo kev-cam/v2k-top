@@ -1,0 +1,77 @@
+/* Copyright (c) 1998-2007 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: $Id: language.icc,v 1.27 2012/10/16 22:38:45 cvs Exp $ */
+
+#include "system.h"
+#include "error.h"
+#include "env.h"
+#include "file.h"
+#include "poolmngr.h"
+#include "str_pool.h"
+#include "strdb.h"
+#include "language.h"
+
+PoolIdentifier TokPool;
+
+extern "C" int InitTok(const char *md,int reg)
+{
+  if (TokPool.id() <= 0)
+  {
+    LangName[POOL] = LANGUAGE;
+
+    if (reg < 0) return -1;
+
+    String mode(md);
+    int    warn  = 3;
+
+    File f("${" V2K_LTOK_CCH "}",LANGUAGE,FT_Token);
+
+    mode          += "d";
+
+    ContigPool pl(&f,mode,POOL,-1);
+
+    CoerceStringPool(TokPool = pl.mngr_indx);
+
+    int de = TokPool.pool()->DataEnd(),
+        nw;
+
+    if ((nw = (de < TOK_POOL_START))) {
+      int pad_l = TOK_POOL_START - de;
+      ASSERT(pad_l > 0);
+      poolRef pad;
+      TokPool.pool()->allocAligned(pad_l,1,&pad,ALC_PERM);
+    }
+
+    tokTable *vp = (tokTable *)Tok_tokens;
+    for(;vp->name;vp++) {
+      poolRef ref = TokPool.pool()->addString(vp->name,reg);
+      if (ref.pool != POOL && ESC_POOL != pl.mngr_indx) {
+#if DBGLVL > 2
+         fprintf (stderr,"Redeclaration of string \"%s\" (%ld/%ld)\n",
+                         vp->name,ref.pool,POOL);
+#endif
+        ref.pool  = POOL;
+        ref.index = Tok_tokens[vp - (tokTable *)Tok_tokens].id.index;
+        const char *str = strCheck(ref);
+        if (!*str) {
+          poolRef ref2 = TokPool.pool()->addString2(vp->name);
+          assert(ref2.pool  == ref.pool);
+          if (ref2.index != ref.index) {
+	    f.Expand();
+	    fprintf (stderr,"Stale pool: %s\n",f.str());
+            assert(0);
+	  }
+        }
+      } else if (ref.index != vp->id.index && warn-- > 0) {
+         fprintf (stderr,
+                  "Warning: %s token (%lld) %s out of sync. by %d (from %x)\n",
+                  LANGUAGE,(long long)(vp - (tokTable *)Tok_tokens),
+                  vp->name,ref.index - vp->id.index,vp->id.index);
+      }
+    }
+
+    TokPool.pool()->minimize();
+  }
+
+  return TokPool;
+}

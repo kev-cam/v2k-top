@@ -1,0 +1,7 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: quotes.tdf,v 1.9 2007/12/19 18:23:41 dkc Exp $
+# - sync with esc.tdf
+\"	DOUBLE
+'	SINGLE
+`	BACK

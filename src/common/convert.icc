@@ -1,0 +1,41 @@
+/* Copyright (c) 1998-2007 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: $Id: convert.icc,v 1.9 2007/02/01 06:46:49 dkc Exp $ */
+  
+
+
+  ePM         old = pmode;
+  int         add = (int)to & ~pmode,
+              del = pmode   & ~(int)to,
+              flg,
+              id;
+  THIS_CLASS *pool = this;
+
+  if (del & PMF_Locked) {
+    pmode = PM(pmode & ~PMF_Locked);
+    del   = PM(del   & ~PMF_Locked);
+  }
+
+  assert(!(pmode & PMF_Locked));
+
+  if (flg = (PM_BaseModes & (add ^ del))) {
+    switch(PM_BaseModes & del) {
+    case PM_Contig: switch(PM_BaseModes & pmode) {
+                    case PM_Mapped:;
+
+                    }
+    default:        id   = reload(PM(to & PM_LoadFlags));
+#ifdef COERCE_POOL
+                    pool = COERCE_POOL(id);
+#endif
+                    goto xtras;
+    }
+  }
+
+xtras:
+  if (add & PMF_Locked) {
+    pool->pmode = PM(pool->pmode |  PMF_Locked);
+    add         = PM(add         & ~PMF_Locked);
+  }
+
+

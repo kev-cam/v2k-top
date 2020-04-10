@@ -1,0 +1,75 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: cpp.tdf,v 1.15 2020/04/06 00:28:43 dkc Exp $
+#
+# // order significant
+#
+void
+bool
+char
+short
+int
+long
+float
+double
+# ^ types
+typename
+# ^ types+
+auto
+const
+signed
+static
+mutable
+virtual
+register
+unsigned
+volatile
+# ^ type qualifiers
+public
+private
+protected
+# ^ access
+do
+if
+for
+try
+case
+else
+enum
+goto
+break
+union
+while
+catch
+class
+throw
+using
+extern
+return
+struct
+switch
+typeof
+friend
+inline
+typedef
+default
+continue
+explicit
+noexcept
+restrict
+operator
+template
+namespace
+const_cast
+static_cast
+dynamic_cast
+reinterpret_cast
+# functions
+delete
+new
+sizeof
+# constants
+true
+false
+# objects
+this

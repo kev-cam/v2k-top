@@ -1,0 +1,164 @@
+#!/usr/bin/perl -s
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: mkdeps,v 1.33 2020/04/06 00:33:45 dkc Exp $
+ 
+$last_missing = "";
+
+$root = "$ENV{PROJECT_ROOT}/$ENV{PROJECT}-".$ENV{$ENV{PROJECT_UC}."_VERSION"};
+
+if (! defined $relp) {
+    $relp = "../..";
+}
+
+$pass = 0;
+
+if (defined $inc) {
+    chomp $inc; 
+    foreach $d (split(/(^|\s+)-I/,$inc)) {
+	if (-e $d) {
+	    $idirs[$#idirs+1] = $d;
+	    # print STDERR "Include $d\n";
+	}
+    }
+}
+
+$tmp=$$;
+
+$keep = ! defined $ENV{"MKDEPS_NOKEEP"};
+
+if ( ! -d $obj_dir ) {mkdir $obj_dir,777;}
+
+DEPS: while (1) {
+
+    if ($pass++) {
+        print STDERR "Pass $pass\n";
+    }
+
+    $missing = "";
+    $where   = "No Location";
+
+    open (STDIN, "$cmd $in 2>&1|");
+    open (STDOUT,">$out-$tmp");
+
+    while (<>) {
+        s+$root+$relp+g;
+        if (/\.o:/) {
+            s/\.o:/$cmode.o:/;
+            $line = $_;
+            s/:.*//; chomp;
+            $target = "$obj_dir/$_";
+            $_ = $in;
+            tr/[a-z]/[A-Z]/; s/\..*//;
+#           print "$_"."_O=$target\n";
+            if ($obj ne $target) {warn "Target($target) is not $obj (for C-mode = $cmode)";}
+            $_ = $line;
+            s/$cmode/\$(CMODE)\$(CMODEX)\$(OBJ_PRFX)/;
+            print "$obj_dir/$_";
+        } elsif (/In file/) {
+            chomp;
+            $where=$_;
+        } elsif (/warning:/ || / from /
+                            || / expects/ || /invalid/ || /unbalanced #/
+                            || / macro .* used with just one arg/
+                            || / macro .* used with only .* args/
+                            || / macro .* used with too many .* args/
+                            || / macro .* passed \d+ arguments, but takes just/
+                            || / macro .* used without args/
+                            || / parse error/
+		            || / linker input file unused since/
+                            || / file path prefix .* never used/
+                            || / unterminated character constant/
+                            || / unimplemented: 64-bit mode not compiled/
+                            || /`#' operator should be followed/) { #`
+            print STDERR $_;
+        } elsif (/unterminated .* conditional/) {
+            close (STDOUT);
+            unlink($out);
+            print STDERR $_;
+            exit (1);
+        } elsif (/Error\(s\) detected/) {
+            $err = $_;
+            $_   = <>; chomp;
+            print STDERR "$_ - $err";
+        } elsif (/No such file or directory/ || /cannot find include file/
+                                             || / file not found/
+                                             || /Could not open include/) {
+            undef $need;
+            if ($& eq "No such file or directory") {
+                if (/: No such file or directory$/) {
+ 	            @fields = split ':';
+                    $need = $fields[$#fields -1]; s/ //;
+                } else {
+   	            @fields = split ':';
+                    $need = $fields[2]; s/ //;
+                }
+            } elsif ($& eq " file not found") {
+                /'(.*)'/;
+                $need = $1;
+            } else {
+                @fields = split '"'; # "
+                $need = $fields[$#fields -1];
+            }
+            if ("" eq $need) {
+              chomp;
+              die "Failed to parse: >>$_<<\n";
+            }
+            print STDERR "Need $need ($where)\n";
+            $missing = $missing." $need";
+            if ($#idirs >= 0 && ! /\//) {
+                s/[\.-].*//;
+              SCAN: foreach $i (@idirs) {
+                    if ( glob("$i/$_.*") ) {
+                        `cd $i ; $ENV{MK_SCRIPT} $ENV{MK_FLAGS} -fast $need >/dev/tty 2>&1`;
+                        last SCAN;
+                    }
+                }
+            }
+            print STDERR "$ENV{MK_SCRIPT} -fast $need\n";
+            `$ENV{MK_SCRIPT} $ENV{MK_FLAGS} -fast $need >/dev/tty 2>&1`;
+	    } elsif ("" ne $_) {
+            print $_;
+        }
+    }
+
+    if ("" eq $missing or ($last_missing eq $missing)) {
+	print "\n";
+        close(STDOUT);
+	last DEPS;
+    }
+
+    $last_missing = $missing;
+}
+
+if ( -f $out."-$tmp" ) {
+  if ( -f $out && ($report || $keep)) {
+    open(OLD,"$out");
+    open(NEW,"$out-$tmp");
+    $l = 0;
+    while ($either || !$l) {
+      $either = 0;
+      if ($o = <OLD>) {$either++;}
+      if ($n = <NEW>) {$either++;}
+      $l++;
+      if ($o ne $n) {
+         print STDERR "Dependencies changed (line $l)\n";
+         exit;
+      }
+    }
+    if ($keep) {
+	print STDERR "Dependencies unchanged\n";
+	exit;
+    } else {
+	print STDERR "Dependencies updated\n";
+    }
+  }
+
+  rename($out."-$tmp",$out) or die "$out.-$tmp - $!";
+
+} else {
+
+  print STDERR "Dependencies not created\n";
+
+}
+

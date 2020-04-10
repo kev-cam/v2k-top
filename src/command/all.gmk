@@ -1,0 +1,66 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.22 2007/02/01 06:45:47 dkc Exp $
+ 
+
+
+default: all
+
+CXX_FILES=
+
+C_FILES=v2k.c
+
+ifndef CONFIG_DIR
+CONFIG_DIR=$(HOME)/$(PROJECT)-$(VERSION)/config
+endif
+
+include $(CONFIG_DIR)/common.gmk
+
+ifndef IGNORE_DEPS
+include $(OBJ_DIR)/deps.gmk
+include ../include/$(OBJ_DIR)/deps.gmk
+else
+ifndef SETUP
+include $(OBJ_DIR)/odefs.gmk
+endif
+endif
+
+ifndef SETUP
+include $(OBJ_DIR)/autolib.gmk
+endif
+
+V2K_LL = COMMON LANGUAGES MODELS V2KSIM
+STTC_LIBS = USE_MODELS USE_V2KSIM
+
+ifeq ($(SHARED_LIBS),1)
+STTC_LIBS =
+endif
+
+V2K_LNK=$(LINK_CXX) $(V2K_O) $(USE_LIBS) $(USE_LANGUAGES)\
+			     $(foreach l,$(STTC_LIBS),$($l))\
+                             $(USE_COMMON) $(SYS_LIBS) -o $@
+
+$(OBJ_DIR)/v2k-$(OBJ_PRFX).tst: $(V2K_O)
+	@rm -f $(foreach l,$(V2K_LL),$($(l)_TST))  ; touch $@
+
+$(OBJ_EXE_DIR)/v2k$(CMODE)$(OBJ_PRFX): lib_common lib_languages\
+					 lib_models lib_v2ksim\
+					 $(OBJ_DIR)/v2k-$(OBJ_PRFX).tst
+	@if [ $(LIBTEST) -a -f $@ ] ; then\
+	  echo $@ Up-to-date;\
+	 else\
+	  echo $(V2K_LNK); $(V2K_LNK);\
+	 fi
+
+$(OBJ_EXE_DIR)/v2k: $(OBJ_EXE_DIR)/v2k$(CMODE)$(OBJ_PRFX)
+	@rm -f $@
+	ln -s v2k$(CMODE)$(OBJ_PRFX) $@
+
+all: 	$(OBJ_EXE_DIR)/v2k
+
+
+line_count:
+	FILES=`ls ../*/*.h ../*/*.c ../*/*.cpp ../*/*.pcc | grep -v \\-` ;\
+	ls -l $$FILES;\
+	wc $$FILES
+

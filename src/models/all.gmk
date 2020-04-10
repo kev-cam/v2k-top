@@ -1,0 +1,37 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.6 2009/07/14 18:06:35 dkc Exp $
+ 
+
+
+default: all
+
+PCXX_FILES=
+CXX_FILES =gates.cpp
+C_FILES   =
+
+MODELS_LIB_OBJ=$(O_FILES)
+
+OTHER_SHARED=languages common
+
+ifndef CONFIG_DIR
+CONFIG_DIR=$(HOME)/$(PROJECT)-$(VERSION)/config
+endif
+
+include $(CONFIG_DIR)/common.gmk
+
+ifndef IGNORE_DEPS
+include $(OBJ_DIR)/deps.gmk
+include ../include/$(OBJ_DIR)/hdrdeps.gmk
+endif
+
+ifndef SETUP
+include $(OBJ_DIR)/autolib.gmk
+endif
+
+vprim.inc:
+	$(MK_SCRIPT) -cd ../include vprim.inc
+
+all: vprim.inc lib_models
+	@echo "Built Models Library - $(MODELS_LIB)"
+

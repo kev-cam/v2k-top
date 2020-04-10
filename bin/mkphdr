@@ -1,0 +1,43 @@
+#!/usr/bin/perl -s
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: mkphdr,v 1.10 2007/02/04 01:38:24 dkc Exp $
+ 
+if (! defined($inc)) {
+    $inc = "./";
+}
+
+if (defined($out)) {
+    $_ = $out;
+    if (m+/+) {open (STDOUT,">$out");}
+    else      {open (STDOUT,">$inc/$out");}
+}
+
+s/\.hpp//;
+
+$f = $_;
+
+if (/.*\//) {
+    $pth = $_;
+    s+.*/++g;
+    $f = $_;
+    $_ = $pth;
+    s/$f//;
+    chdir "$_";
+}
+
+@m = split ' ',$modes;
+
+$_ = $f; s/-pp.h//; $f = $_;
+
+print '#include "modes-a.h"'."\n";
+
+foreach $mode (@m) {
+    $_ = "${f}_$mode";
+    tr/[a-z]/[A-Z]/;
+    print "\n#undef THIS_CLASS\n",
+          "#undef PARENT_CLASS\n",
+          "#ifndef $_\n#define $_\n",
+          '#include "'."../$src/$f-$mode.hpp".'"'."\n",
+          "#endif\n";
+}

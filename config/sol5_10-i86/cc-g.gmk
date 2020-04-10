@@ -1,0 +1,8 @@
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: cc-g.gmk,v 1.1 2005/02/17 09:38:27 dkc Exp $
+ 
+
+
+OPT_CFLAGS=-g $(DEBUG_DEFS)
+include $(CONFIG_DIR)/sunpro-cc.gmk

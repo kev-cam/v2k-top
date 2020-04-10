@@ -1,0 +1,8 @@
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: clang-g.gmk,v 1.1 2012/10/16 22:41:38 cvs Exp $
+ 
+
+
+OPT_CFLAGS=-g $(DEBUG_DEFS)
+include $(CONFIG_DIR)/clang.gmk

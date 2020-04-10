@@ -1,0 +1,232 @@
+/* Copyright (c) 1998-2007 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: */ extern "C" const char * udp_pool_pcc_rcsid() {return "$Id: udp_pool.pcc,v 1.18 2007/02/01 06:49:08 dkc Exp $";}
+
+#define CLASS_FILE UDP_POOL
+#define VERILOG3
+#define VERILOG4
+
+#include "system.h"
+#include "error.h"
+#include "assertions.h"
+#include "poolmngr.h"
+#include "v2k_mem.h"
+#define NEED_VERILOG
+#include "tokpool.h"
+#include "verilog.h"
+#include "mod_pool.h"
+#include "udp_pool.h"
+#include "arith.h"
+
+#define THIS_EXPR TemplateExpr
+
+class TemplateUdpPool:public TemplatePoPool {
+#undef  POOL_CLASS
+#define POOL_CLASS   Udp
+#undef  THIS_CLASS
+#define THIS_CLASS   TemplateUdpPool
+// THIS_CLASS = TemplateUdpPool
+#undef  PARENT_CLASS
+#define PARENT_CLASS TemplatePoPool
+// PARENT_CLASS = TemplatePoPool
+public:
+#include "TemplateUdpPool.fld"
+#define INHERIT_MINIMIZE
+#define INHERIT_CLOSE
+#include "TemplatePool.vfn"
+#include "TemplateUdpPool.vfn"
+
+  inline TemplateUdpPool *me() const {
+    return (TemplateUdpPool *)self;
+  };
+  inline TemplateUdpPool *mi() const {
+    return (TemplateUdpPool *)PoolMngr->pool(mngr_indx);
+  };
+  inline TemplateUdpPool *mod_pool(int id)
+  {
+    return (TemplateUdpPool *)(PoolMngr->pool(id));
+  };
+
+  void Init();
+};
+
+#define UDP_ONLY
+
+TemplateUdpPool:: TemplateUdpPool()    {}
+TemplateUdpPool:: TemplateUdpPool(int) {}
+TemplateUdpPool::~TemplateUdpPool()    {}
+
+int TemplateUdpPool::dumpAscii(const char *file)
+{
+  return STS_NIY;
+}
+
+ePM TemplateUdpPool::changeMode(ePM to)
+{
+#include "../common/convert.icc"
+  return old;
+}
+
+sFieldDesc *TemplateUdpPool::description(){
+  static sFieldDesc Description[] = {
+#include "TemplateUdpPool-dsc.h"
+  };
+
+  return Description;
+}
+
+#include "../common/describe.icc"
+
+void TemplateUdpPool::Init()
+{
+  if (self != this) {
+    ((TemplateUdpPool *)self)->Init();
+  } else if (AO_PRIM != ao_typ) {
+    ao_typ     = AO_PRIM;
+    indxd_prts = 0;
+    stmts      = 0;
+    in         = 0;
+    out        = 0;
+    seq        = 0;
+    ports      = 0;
+    parms      = 0;
+    attrs      = 0;
+    files      = 0;
+    IREF2MODE(NullRef,&port);
+    IREF2MODE(NullRef,&parm);
+    IREF2MODE(NullRef,&attr);
+    IREF2MODE(NullRef,&file);
+    IREF2MODE(NullRef,&table);
+  }
+}
+
+void TemplateUdpPool::Load(Prim *prm)
+{
+  prm->typ        = AO_PRIM;
+  prm->name       = name;
+  prm->stmt_count = stmts;
+  prm->in         = in;
+  prm->out        = out;
+  prm->seq        = seq;
+}
+
+void TemplateUdpPool::Init(Prim *prm,int free_tbl)
+{
+  poolRef    ref;
+  int        n,
+             w,
+             prts   = ports = prm->port()->count(),
+             prms   = parms = prm->parm()->count(),
+             atrs   = attrs = prm->attr()->count(),
+             fls    = files = prm->file()->count();
+  Table     *entry  = prm->table,
+            *nxt;
+  ExprAlias *ea,
+            *ea_nxt = Aliases;
+
+  for (; ea = ea_nxt; delete ea) ea_nxt = ea->next;
+  Aliases = 0;
+
+  if (free_tbl) prm->table = 0;
+
+  name    = prm->name;
+  stmts   = prm->stmt_count;
+  in      = prm->in;
+  out     = prm->out;
+  seq     = prm->seq;
+  w       = in + out + seq;
+  stmts   = prm->stmt ? 1
+                      : 0;
+
+  allocAligned(prts * sizeof(plPort),        8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->port);
+  allocAligned(prms * sizeof(MAX_PLATTR_OBJ),8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->parm);
+  allocAligned(atrs * sizeof(MAX_PLATTR_OBJ),8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->attr);
+  allocAligned(fls  * sizeof(poolRef),       8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->file);
+  allocAligned(w * prm->tbl_sz,              1,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->table);
+
+  XREF(plStmtAny) rs = makeStmts(stmts);
+  mi()->stmt         = I(rs);
+
+  XREF(plPort) prt = X(mi()->port);
+  for (n = 0; n < prts; n++) {
+    plSavePort(prt,prm->port_map(n));
+    INCR_REF(prt);
+  }
+
+  assert(sizeof(MAX_PLATTR_OBJ) == sizeof(plRngdAttr));
+
+  XREF(plRngdAttr) arf = X(mi()->parm);
+  for (n = 0; n < prms; n++) {
+    plSaveAttr(*(XREF(plAttr) *)&arf,prm->parm_map(n));
+    INCR_REF(arf);
+  }
+
+  arf = X(mi()->attr);
+  for (n = 0; n < atrs; n++) {
+    plSaveAttr(*(XREF(plAttr) *)&arf,prm->attr_map(n));
+    INCR_REF(arf);
+  }
+
+  XREF(poolRef) frf = X(mi()->file);
+  for (n = 0; n < fls; n++) {
+    *P(frf) = prm->file_map(n)->ref;
+    INCR_REF(frf);
+  }
+
+  XREF(char) ptbl = X(mi()->table);
+  char *pt = P(ptbl);
+  for (; entry ; entry = nxt, pt += w) {
+    nxt = entry->next;
+    BCOPY(entry,pt,w);
+    if (free_tbl) {
+      free(entry);
+    }
+  }
+
+  if (stmts) {
+    assert(!prm->stmt->next);
+    plSaveStmt(rs,prm->stmt);
+  }
+}
+
+poolRef TemplateUdpPool::itemName(eREF typ,int i)
+{
+  switch (typ) {
+  case REF_PORT:    {plPort *prt = P(port);
+                     prt += i;
+                     return prt->name;}
+  case REF_PARM:    {MAX_PLATTR_OBJ *pattr = P(parm);
+                     pattr += i;
+                     return pattr->nm;}
+  }
+  assert(("itemName/typ",0));
+
+  return NullRef;
+}
+
+long TemplateUdpPool::plSaveStmt(XREF(plStmtAny) srf,Stmt *stmt0)
+{
+  Stmt    *stmt = stmt0;
+  int      n    = 0;
+  poolRef  ref;
+
+  for (n = 0,stmt = stmt0; stmt ; n++, stmt = stmt->next, INCR_REF(srf)) {
+
+    plStmtAny *pls      = P(srf);
+    pls->Header.line    = stmt->line;
+    pls->Header.file_id = stmt->file_id;
+
+    switch (pls->Header.typ = stmt->stmt_typ()) {
+#define STATEMENT(e,t,m) case e: plSave##t(*(XREF(pl##t) *)&srf,(t *)stmt); break;
+#include "statement.inc"
+    default:                     assert(("Bad Statement type in UDP",0));
+    }
+  }
+
+  return n;
+}

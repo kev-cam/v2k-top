@@ -1,0 +1,10 @@
+/* Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: */ const char * WorkArounds_txt_rcsid() {return "$Id: WorkArounds.txt,v 1.5 2003/01/14 02:25:59 dkc Exp $";}
+ 
+
+
+BUG/FEATURE Work-Around C-Defines
+
+LD_BUG_01      gcc/++ (recursive) inlined functions give ld "multiply defined"
+               error (cygwin)

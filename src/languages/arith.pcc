@@ -1,0 +1,121 @@
+/* Copyright (c) 1998-2007 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: */ extern "C" const char * arith_pcc_rcsid() {return "$Id: arith.pcc,v 1.19 2009/05/22 21:22:48 dkc Exp $";}
+ 
+
+
+#define CLASS_FILE ARITH
+#define VERILOG3
+
+#include "system.h"
+#include "error.h"
+#include "assertions.h"
+#include "poolmngr.h"
+#include "template.h"
+#define NEED_VERILOG
+#define NEED_MATH
+#include "tokpool.h"
+#define INLINE_ALL_EXPR
+#include "verilog.h"
+#include "arith.h"
+
+class TemplateExpr : public BaseExpr {
+
+  static TemplatePool *PP;
+
+#define Expr       TemplateExpr
+#define EXPR_SUB   TemplateExprXref
+#undef  EXPR_ALIAS
+
+#include "expr.h"
+#include "logic.h"
+
+  inline TemplatePool *pool(int id) const
+  {
+    return PP = (TemplatePool *)(PoolMngr->pool(id));
+  }
+public:
+#if defined(POOL_MODE_INM) || defined(POOL_MODE_NLD)
+  inline TemplateExpr *lhs(TemplatePool *pp) const {return (left.ptr);};
+  inline TemplateExpr *lhs()                 const {return (left.ptr);};
+  inline TemplateExpr *rhs(TemplatePool *pp) const {return (right.ptr);};
+  inline TemplateExpr *rhs()                 const {return (right.ptr);};
+  inline void         *pntr()                const {return (value.ptr);};
+#else
+  inline TemplateExpr *lhs(TemplatePool *pp) const {
+    return left.pi.pool
+             ? (TemplateExpr *)pp->i_deref(IR(left))
+             : 0;
+  };
+  inline TemplateExpr *lhs() const {
+    return left.pi.pool > 0
+             ? (TemplateExpr *)pool(left.pi.pool)->deref(IR(left))
+             : left.pi.pool < 0 ? (TemplateExpr *)PP->i_deref(IR(left))
+                                : 0;
+  };
+  inline TemplateExpr *rhs(TemplatePool *pp) const {
+    return right.pi.pool
+             ? (TemplateExpr *)pp->i_deref(IR(right))
+             : 0;
+  };
+  inline TemplateExpr *rhs() const {
+    return right.pi.pool > 0
+             ? (TemplateExpr *)pool(right.pi.pool)->deref(IR(right))
+             : right.pi.pool < 0 ? (TemplateExpr *)PP->i_deref(IR(right))
+                                 : 0;
+  };
+  inline void *pntr() const {
+    return value.ref.pool > 0
+             ? (TemplateExpr *)pool(value.ref.pool)->deref(IR(value.ref))
+             : value.ref.pool < 0 ? PP->deref(IR(value.ref))
+                                  : 0;
+  };
+#endif
+  inline plExpr *pl_lhs(TemplatePool *pp) const {return (plExpr *)lhs(pp);};
+  inline plExpr *pl_rhs(TemplatePool *pp) const {return (plExpr *)rhs(pp);};
+  inline plExpr *pl()                     const {return (plExpr *)this;};
+
+  inline bool    isInUse()                const {return 1;};
+
+  void dump(Stream *,ContextObj *root);
+
+  // PRIVATE
+
+  void dump(const ValueFn *,Stream *,VlType,void *,void *,ContextObj *root);
+
+  inline const char   *strDump(poolRef ref)  {return strDeref(ref);}
+  inline PrtdObj      *taskObj(...)          {return 0;}
+  inline PrtdObj      *funcObj(...)          {return 0;}
+
+};
+
+TemplatePool *TemplateExpr::PP;
+
+#define Expr TemplateExpr
+
+#define POINTER(p)      p.ptr
+#define EXPR_DATA_ONLY
+
+#include "expr.inc"
+
+#include "arith.icc"
+#include "logic.icc"
+
+void TemplateExpr::dump(Stream *strm,ContextObj *root)
+{
+  TemplateExpr *expr = this;
+# define ROOT          root
+# define XTRA_ARG      ,root
+# define MAPS          root->
+# define STRM_ARG      strm,
+# define DUMP(x,s)     x->dump(s,root)
+# define VFN_EXPR(vfn) ((TemplateExpr *)pntr())
+# define KEEP_DEFS
+# define Strm()        strm
+# include "dump_expr.inc"
+}
+
+void TemplateExpr::dump(const ValueFn *vfn,Stream *strm,VlType typ,void *xdf,void *xtnd,ContextObj *root)
+{
+# include "dump_value.inc"
+}

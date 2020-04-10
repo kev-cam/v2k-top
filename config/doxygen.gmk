@@ -1,0 +1,49 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: doxygen.gmk,v 1.13 2009/11/28 07:41:50 dkc Exp $
+ 
+
+
+html/%.html::% $(BIN_DIR)/c2html
+	@if [ ! -d html ] ; then mkdir html ; fi ;\
+	 c2html -in=$$PWD/$< -hdir=html -indx=1 -out=$@\
+               -doxy=../../../html -docs=../../../docs -cgi=$(CGI_SERVER)\
+               "-incl=$(C_INCLUDES)"
+
+doxy.cfg: doxy.tmpl
+	echo "# Generated from" $< > $@
+	cat $< | while read line ; do eval echo $$line >> $@ ; done
+
+html/files.txt:
+	@case `echo $(HTML_SRC) | wc -w | sed 's/ //g'` in\
+	  0) echo "No file in $(SOURCE_DIR)" ;;\
+	  *) (echo DIR=$(SOURCE_DIR) ; ls $(HTML_SRC)) > html/files.txt ;;\
+	esac
+
+html/files.html: html/files.txt
+	cat html/files.txt | while read f ; do\
+	  case $$f in\
+	    DIR=*) eval $$f;\
+		   echo "<h1>Directory: $$DIR</h1>" > $@;;\
+	    *)     echo '<h3><a href="'$$f.html'" target=_top>'$$f'</a></h3>' >> $@;;\
+	  esac;\
+	done
+
+HTML_SRC=$(CXX_FILES)  $(C_FILES) $(H_FILES) $(PCXX_FILES) $(INC_FILES)\
+         $(foreach t,$(TOK_FILES),$t.tdf)
+HTML    =$(foreach f,$(HTML_SRC),html/$(f).html)
+
+html: $(HTML) html/files.txt
+
+doxy: doxy.cfg
+	EXE=`which doxygen`;\
+	if [ -f $$EXE ] ; 	then exec $$EXE doxy.cfg ;\
+				else echo Doxygen not installed ; fi
+	exit 0;
+
+READM%: READM%.c $(CONFIG_DIR)/doxygen.gmk
+	chmod +w $@;\
+	gcc -E $@.c '-DPROJECT(a,b)=a##$(PROJECT)-$(DEV_VERSION)##b' |\
+            grep -v "^#" | sed -e 's/%//g' -e 's/~/\#/'>$@;\
+	chmod -w $@
+

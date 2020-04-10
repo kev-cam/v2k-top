@@ -1,0 +1,68 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.36 2007/02/01 06:46:49 dkc Exp $
+ 
+
+
+default: all
+
+PCXX_FILES=str_pool.pcc template.pcc ref.pcc
+
+CXX_FILES =poolmngr.cpp basepool.cpp file.cpp strfunc.cpp args.cpp error.cpp\
+           str_func.cpp strdb2.cpp stream.cpp env.cpp job.cpp lists.cpp\
+	   sigtrap.cpp ldlib.cpp dyn.cpp
+
+C_FILES   =strdb.c misc.c mem.c $(SWIG_C)
+
+COMMON_LIB_OBJ=$(O_FILES)
+
+ifndef CONFIG_DIR
+CONFIG_DIR=$(HOME)/$(PROJECT)-$(VERSION)/config
+endif
+
+include $(CONFIG_DIR)/common.gmk
+
+ifeq (1-1,$(HAVE_SWIG)-$(SHARED_LIBS))
+SWIG_C=libcommon_wrap.c
+endif
+
+ifndef IGNORE_DEPS
+include icc-deps.gmk
+include $(OBJ_DIR)/deps.gmk
+include ../include/$(OBJ_DIR)/hdrdeps.gmk
+endif
+
+ifndef SETUP
+include $(OBJ_DIR)/autolib.gmk
+endif
+
+$(INC_DIR)/str_pool-dsc.h: str_pool.pls
+	$(MK_SCRIPT) $(MK_FLAGS) -fast str_pool-dsc.h
+
+syserrs-a.h: $(PROJECT_ROOT)/$(PROJECT)/src/include/$(SYS_OS)-$(SYS_CPU)/syserrs-a.h
+
+usrerrs-a.h: $(INC_SYS_DIR)/usrerrs-a.h
+
+modes-a.h-shadow: ../../config/pool.gmk all.gmk
+	(echo "#ifndef MODES_A_H" ; echo "#define MODES_A_H" ;\
+         echo '#include "v2k_misc.h"') > $@
+	for m in $(USE_MODES); do\
+	  echo "#define " `echo using_$$m | tr '[a-z]' '[A-Z]'` >> $@;\
+        done
+	echo '#endif' >> $@
+	if [ -f $(INC_DIR)/modes-a.h ] ; then\
+	  diff $@ $(INC_DIR)/modes-a.h;\
+	  if [ 0 != $$? ] ; then\
+	    cat $@ > $(INC_DIR)/modes-a.h;\
+	  fi;\
+	else\
+	  cat $@ > $(INC_DIR)/modes-a.h;\
+	fi
+
+$(INC_DIR)/modes-a.h modes-a.h:  modes-a.h-shadow
+
+headers: $(INC_SYS_DIR)/usrerrs-a.h\
+	 $(INC_DIR)/modes-a.h
+
+all: lib_common
+	@echo "Built Common Library - $(COMMON_LIB)"
