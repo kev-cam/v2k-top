@@ -1,0 +1,15 @@
+// Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+// Distributed under the GNU Lesser General Public License
+// RCS ID: $Id: TemplateXpPool.vfn,v 1.8 2007/01/13 03:42:54 dkc Exp $
+ 
+
+
+virtual XREF(plExpr)    plSaveExpr(Expr *);
+virtual int             eval_i32(plExpr *);
+virtual int             eval_i32(plExpr *,Inst *);
+virtual int             evalExpr(Inst *,plExpr *,plExpr *);
+virtual int             evalSlice(Inst *,plExpr *,plExpr *,rngEval *,int);
+virtual int             evalRanges(Inst *,plExpr *,rngEval *,int);
+virtual int             checkRange(Inst *,int,int,plExpr *,plExpr *);
+virtual void            mapFunc(rrfTup *,rrfTup *);
+virtual void            mapTask(rrfTup *,rrfTup *);

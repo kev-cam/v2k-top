@@ -1,0 +1,5 @@
+# compressed extension:actual extension:compressor:decompressor
+.gz::gzip -9:gunzip
+.bz2::bzip2:bunzip2
+.Z::compress:uncompress
+.tgz:.tar:gzip:gunzip

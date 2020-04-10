@@ -1,0 +1,62 @@
+// Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+// Distributed under the GNU Lesser General Public License
+// RCS ID: $Id: TemplatePool.vfn,v 1.29 2007/07/10 23:31:07 dkc Exp $
+ 
+
+
+THIS_CLASS();
+THIS_CLASS(int);
+
+THIS_CLASS(const File *,const char *);
+THIS_CLASS(const File *,const char *,int,int);
+
+virtual ~THIS_CLASS();
+
+#ifndef POOL_CLASS
+virtual void        Release()                              VIRTUAL_MODE;
+virtual void        Destroy(bool)                          VIRTUAL_MODE;
+virtual const char *strClass()                             VIRTUAL_MODE;
+virtual const char *strMode()                              VIRTUAL_MODE;
+virtual ePM         getMode()                              VIRTUAL_MODE;
+virtual poolRef     addString(const char *,int reg = 1)    VIRTUAL_MODE;
+virtual poolRef     addString2(const char *)               VIRTUAL_MODE;
+virtual int         DataEnd()                              VIRTUAL_MODE;
+virtual void       *allocAligned(int,int,poolRef *,eALC)   VIRTUAL_MODE;
+virtual void       *alloc(int)                             VIRTUAL_MODE;
+virtual void       *deref(int)                             VIRTUAL_MODE;
+virtual void       *deref(voidIref *)                      VIRTUAL_MODE;
+virtual void       *deref(voidXref *)                      VIRTUAL_MODE;
+virtual void       *deref(poolRef)                         VIRTUAL_MODE;
+virtual void        dealloc(void *,int)                    VIRTUAL_MODE;
+virtual void        setRef(voidIref *,poolRef)             VIRTUAL_MODE;
+virtual int         thread()                               VIRTUAL_MODE;
+virtual int         pid()                                  VIRTUAL_MODE;
+virtual void        setOwner(int,int)                      VIRTUAL_MODE;
+virtual long        index(void *)                          VIRTUAL_MODE;
+virtual long        index(voidIref)                        VIRTUAL_MODE;
+virtual const char *fileName()                             VIRTUAL_MODE;
+virtual void       *setFile(const File *,const char *)     VIRTUAL_MODE;
+virtual int         syncFile(eFM)                          VIRTUAL_MODE;
+virtual int         reload(eFM)                            VIRTUAL_MODE;
+virtual int         reload(ePM)                            VIRTUAL_MODE;
+virtual int         writePool(Stream *)                    VIRTUAL_MODE;
+virtual void       *readPool(Stream *)                     VIRTUAL_MODE;
+#endif
+
+virtual sFieldDesc *description()                          VIRTUAL_MODE;
+virtual int         describe(DescFn)                       VIRTUAL_MODE;
+
+#ifndef INHERIT_MINIMIZE
+virtual void        minimize()                             VIRTUAL_MODE;
+#endif
+#ifndef POOL_VIRTUAL
+virtual ePM         changeMode(ePM)                        VIRTUAL_MODE;
+virtual int         dumpAscii(const char *)                VIRTUAL_MODE;
+#ifndef INHERIT_CLOSE
+virtual int         close_pool(int,void *)                 VIRTUAL_MODE;
+virtual int         close_pool()                           VIRTUAL_MODE;
+#endif
+#endif
+
+#undef INHERIT_MINIMIZE
+#undef POOL_VIRTUAL

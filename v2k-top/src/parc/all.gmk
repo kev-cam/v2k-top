@@ -1,0 +1,55 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.10 2009/07/08 08:50:10 dkc Exp $
+ 
+
+
+default: all
+
+PCXX_FILES=
+CXX_FILES =parc.cpp
+C_FILES   =
+
+PARC_LIB_OBJ=$(O_FILES)
+
+ifndef CONFIG_DIR
+CONFIG_DIR=$(HOME)/$(PROJECT)-$(VERSION)/config
+endif
+
+include $(CONFIG_DIR)/common.gmk
+
+ifndef IGNORE_DEPS
+include $(OBJ_DIR)/deps.gmk
+include ../include/$(OBJ_DIR)/hdrdeps.gmk
+endif
+
+ifndef SETUP
+include $(OBJ_DIR)/autolib.gmk
+endif
+
+RM=rm
+
+parc.tar: $(HOME)/v2k-tests/ParC/*.pc $(HOME)/v2k-tests/ParC/*.h
+	mkdir /tmp/parc;\
+	cp $(HOME)/v2k-tests/ParC/*.pc $(HOME)/v2k-tests/ParC/*.h\
+	   $(HOME)/v2k-tests/ParC/Makefile $(HOME)/v2k-tests/ParC/cmp_tst\
+	   ../include/parc.h parc.cpp \
+		/tmp/parc
+	HERE=`pwd` ; (cd /tmp/parc ; tar -cvf $$HERE/parc.tar *)
+	$(RM) -fr /tmp/parc
+
+TEST_DIR=/tmp/parc_tst
+CLEAN_UP=rm -fr $(TEST_DIR)
+TEST_MAKE=make
+
+tst_trf: parc.tar
+	if [ ! -d $(TEST_DIR)  ] ; then mkdir $(TEST_DIR)  ; fi
+	if [ ! -d /tmp/scratch ] ; then mkdir /tmp/scratch ; fi
+	(rm -f /tmp/scratch/*pc.i $(TEST_DIR)/*.lg2 ; exit 0)
+	cat parc.tar | (cd $(TEST_DIR) ; tar -xvf -)
+	MAKEFLAGS= $(TEST_MAKE) -C $(TEST_DIR) run USR_ARGS=$(USR_ARGS)
+	$(CLEAN_UP)
+
+all: lib_parc
+	@echo "Built Models Library - $(PARC_LIB)"
+

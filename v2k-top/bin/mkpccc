@@ -1,0 +1,131 @@
+#!/usr/bin/perl -s
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: mkpccc,v 1.23 2007/10/09 21:25:56 dkc Exp $
+ 
+if (defined($in))  {
+    open (STDIN, "$in");
+}
+if (defined($out)) {
+    if (! defined $nochmod) {chmod 0666,$out;}
+    open (STDOUT,">$out");
+    $_ = $out;
+    s/-.*/-icc.gmk/;
+    $icc = "";
+    open (ICC,">$_");
+}
+
+$_ = $out;
+
+if (/-inm.c/) {$mode="InMem";   $MODE="INM"; $Mode = "inm";}
+if (/-ctg.c/) {$mode="Contig";  $MODE="CTG"; $Mode = "ctg";}
+if (/-dsk.c/) {$mode="OnDisk";  $MODE="DSK"; $Mode = "dsk";}
+if (/-mpd.c/) {$mode="Mapped";  $MODE="MPD"; $Mode = "mpd";}
+if (/-vrt.c/) {$mode="Virtual"; $MODE="VRT"; $Mode = "vrt";}
+
+s/\.c/.h/;
+$hpp=$_;
+$tmp=$$;
+open (HPP,">$_-$tmp"); print HPP "// Auto\n";
+
+open (HDR,"../include/defpmode.h");
+
+while (<HDR>) {
+    s/Template/$mode/;
+    print $_;
+}
+
+print "#define DEFMODE_H\n";
+print "#define POOL_MODE_$MODE\n";
+print "#undef  TEMPLATE\n";
+
+$inclass     = 0;
+$know_ln     = 1;
+$line        = 0;
+$any_inlined = 0;
+
+while (<>) {
+    $line++;
+    if (! $know_ln) {
+#	print "# ",$line,' "',$in,'"'," 1\n";
+        $know_ln = 1;
+    }
+    if (/^class/ || /^template/) {$inclass = 1;}
+    if (/^#include/ ) {
+        if (/\.icc/) {
+	    @inc = split('"'); # "
+	    if ( -f $inc[1] ) {
+#		print '# 1 "',$inc[1],'"',"\n";
+		$_           = `cat $inc[1]`;
+                $any_inlined = 1;
+                $know_ln     = 0;
+		$icc         = $icc." $inc[1]";
+	    }
+	}
+    } else {
+	s/Template/$mode/g;
+    }
+    if (/#def.*CLASS_FILE/) {
+	s/.*CLASS_FILE //; chomp;
+        $_ = "#define $_"."_$MODE\n";
+    }
+    if (/#def.*POOL_CLASS/) {
+        @flds = split;
+        $plnm = $flds[$#flds];
+        print "#define COERCE_POOL(i) ($mode${plnm}Pool *)Coerce${plnm}Pool(i)\n";
+    }
+    if (/RCS.ID/ && ! m+//.*RCS.ID+) {
+	print "// ";
+    }
+    print $_;
+    if ($inclass > 0) {
+        if (/PRIVATE/) {$inclass = -1;}
+        else           {print HPP $_;}
+    } elsif ($inclass < 0) {
+        if (/PUBLIC/)  {$inclass =  1;}
+    }
+    if (/^};/) {
+        if ($inclass <0) {print HPP $_;}
+        $inclass =  0;
+    }
+}
+
+if (defined($out)) {
+    close (STDOUT);
+    if (! defined $nochmod) {chmod 0444,$out;}
+#   else                    {print STDERR "Left $out unprotected\n";}
+    print ICC "# Auto\n";
+    foreach $m (split ' ',$modes) {
+      $_ = "$out: $in $icc\n\t\$(MK_SCRIPT) \$(MK_FLAGS) -fast $out\n";
+      s/-$Mode/-$m/g;
+      print ICC "$_";
+    }
+    print ICC "# End\n"
+}
+
+close HPP;
+$rnm = 0;
+if (! -f "$hpp") {
+    $rnm = 1;
+} elsif (defined $use_diff) {
+    $diff == `diff $hpp $hpp-$tmp`;
+    if ("" ne $diff ) {
+       print "Diff:\n",$diff;
+       $rnm = 1;
+    }
+} else {
+    open (HPT,"$hpp-$tmp") or die($!.": $hpp");
+    open (HPP,"$hpp");
+    CMP:while (<HPT>) {
+        if (<HPP> ne $_) {print STDERR "Header $hpp changed\n";
+                          $rnm = 1;
+                          last CMP;}
+    }
+}
+
+if ($rnm) {
+    if (defined $nochmod) { unlink "$hpp"; }
+    rename "$hpp-$tmp","$hpp" or die($!.": $hpp-$tmp");
+} else {
+    unlink "$hpp-$tmp";
+}

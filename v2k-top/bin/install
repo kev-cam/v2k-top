@@ -1,0 +1,43 @@
+#!/bin/csh -f
+
+set files = ()
+set args  = ()
+
+unset sl
+
+while ($#argv)
+  switch ($1)
+    case -sl:
+      set sl
+      breaksw
+    case -xv:
+    case -vx:
+      set verbose
+      set echo
+      breaksw
+    case -*:
+      set args  = ($args:q $1:q)
+      breaksw
+    default:
+      set files = ($files:q $1:q)
+  endsw
+  shift
+end
+
+if ($?sl) then
+  set argv  = ($files:q)
+  set files = ()
+  while ($#argv)
+    switch ($1)
+    default:
+      set files = ($files:q $cwd:q/$1:q)
+      breaksw
+    case /*:
+      set files = ($files:q $1:q)
+    endsw
+    shift
+  end
+  ln -s $files:q
+else
+  exec /usr/bin/install $args:q $files:q
+endif

@@ -1,0 +1,110 @@
+#!/usr/bin/perl -s
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: mkdsc,v 1.20 2010/05/13 18:34:54 dkc Exp $
+ 
+if (defined($in))  {
+    open (STDIN, "$in");
+    if (! defined $struct) {
+	$_ = $in; s/.fld//; s+.*/++;
+	$struct = "$_";
+    }
+}
+if (defined($out)) {
+    $_   = $out;
+    if (!m+/+) {$_="$inc/$_";}
+    open (STDOUT,">$out");
+    $_   = $out;
+    s/[\.-].*/-rop.cpp/;
+    $rop_fl = $_;
+}
+
+print "/* Created by mkdsc */\n\n";
+
+if (defined($rop_fl)) {
+#   print STDERR "$rop\n";
+    open (ROP,">$rop_fl");
+}
+
+if (defined($predef)) {
+    open (PRDF,"$predef") or open(PRDF,"$inc/$predef");
+    while(<PRDF>) {
+	if (/DECL.*\(\s*(.*?)\s*\)/) {
+	    $rop{$1} = 1;
+        }
+    }
+}
+
+while (<>) {
+    if (/^#/ || m"^//" || m"^/\*.*\*/" || /^\s*$/) {
+        print $_;
+    } else {
+	last;
+    }
+}
+
+if ( defined $struct ) {
+    print "#ifndef THIS_CLASS\n";
+    print "// THIS_CLASS = $struct\n";
+    print "#define THIS_CLASS $struct\n";
+    print "#endif\n";
+}
+
+
+print "\n",'{"","'.$struct.'",POOL_MODE,-1},',"\n";
+
+LOOP: while (<>) {
+    if (/^#/ || m"^//" || m"^/\*.*\*/") {
+        print $_;
+	next;
+    }
+    @decl = split ' ',$_;
+    $_ = $decl[1];
+    if ("" eq $_) {
+	print "\n";
+        next;
+    }
+    s/;//;
+    $name = $_;
+    if (/\[/) {
+	@parts    = split '\[',$_;
+	$name     = $parts[0];
+	$parts[0] = "";
+	$array    = join '[',@parts;
+    } else {
+	$array    = "";
+    }
+    if (/\**/) {$ptr = $&;}
+    else       {$ptr = "";}
+    $_ = $name;
+    tr/&*/=/; s/=//g;
+    if (/ARRAY/) {
+        @arr  = split 'ARRAY.*\(|\)';
+        $fld_name = $arr[1];
+    } else {
+        $fld_name = $_;
+    }
+    $_    = $decl[0];
+    $typ  = $_;
+    $desc = 0;
+
+    if (/REF\(\s*(.*?)\s*\)/) {
+        $ref = $_;
+	$typ = $1;
+        if (1 != $rop{$typ}) {
+            $rop{$typ} = 1;
+            $_         = $ref;
+            s/REF/ref/; s/\(..*\)//;
+            print ROP "\n",
+                      "DECL_IDEREF($typ)\n",
+                      "DECL_XDEREF($typ)\n";
+            $desc = $typ."Desc";
+        }
+	$typ = "voidRef";
+    }
+    print '{"'.$ptr.$decl[0].$array.'",'."\t".'"'.$name.'",',
+            "\tsizeof($typ $ptr $array),\tOffsetOf(THIS_CLASS,$fld_name),$desc},\n";
+}
+
+print "{0,0,0,0,0}\n";
+close ROP;

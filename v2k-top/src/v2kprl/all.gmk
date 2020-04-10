@@ -1,0 +1,43 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.6 2003/01/14 02:26:22 dkc Exp $
+ 
+
+
+default: help
+
+CXX_FILES =
+
+PERL_ILIB=v2kprl
+
+C_FILES   =$(foreach l,$(PERL_ILIB),lib$(l)_wrap.c) v2kprl.c
+
+V2KPRL_LIB_OBJ=$(O_FILES) $(LANGUAGES_STTC_LIB)\
+			  $(COMMON_STTC_LIB)
+
+ifndef CONFIG_DIR
+CONFIG_DIR=$(HOME)/$(PROJECT)-$(VERSION)/config
+endif
+
+include $(CONFIG_DIR)/common.gmk
+
+ifndef IGNORE_DEPS
+include $(OBJ_DIR)/deps.gmk
+include ../include/$(OBJ_DIR)/hdrdeps.gmk
+endif
+
+ifndef SETUP
+include $(OBJ_DIR)/autolib.gmk
+endif
+
+CLEANABLE=$(V2KPRL_LIB) $(O_FILES)
+
+perl_dirs:
+	mkdir -p $(OBJ_LIB_DIR)/perl;\
+	mkdir -p $(OBJ_LIB_DIR)/pm
+
+all: lib_v2kprl
+	@echo "Built Perl I/F Library - $(V2KPRL_LIB)"
+
+help:
+	echo Run ./perl.csh to rebuild everything as a perl module.

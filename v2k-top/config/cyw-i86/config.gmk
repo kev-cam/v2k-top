@@ -1,0 +1,57 @@
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: config.gmk,v 1.12 2009/10/30 21:43:24 dkc Exp $
+ 
+
+
+GTAR       = tar
+LD         = g++
+
+OBJ        = .o
+
+R_SHARED   =$(foreach r,$(OTHER_SHARED),-Wl,-R$(OBJ_LIB_DIR)/$(LIB_PRFX)$r$(CMODE)$(CMODEX)$(OBJ_PRFX)$(LIB_MODE))
+
+ECHON      =/bin/echo -n
+RM         =rm
+ifndef AR_CR
+AR_CR      =ar cr
+endif
+ifndef AR_UPDATE
+AR_UPDATE  =u
+endif
+ifndef LD_OUT
+LD_OUT     =-o
+endif
+CYG_DLL_FLAGS=-Wl,--enable-auto-import,--export-dynamic
+ifndef LD_SO
+LD_SO      =-shared $(CYG_DLL_FLAGS) $(R_SHARED)
+endif
+
+LIB_PRFX   =lib
+LIB_TYPE_A =.a
+LIB_TYPE_SO=.so
+
+USE_LIBS   = -L$(OBJ_LIB_DIR)
+
+X11_INC    = /usr/X11R6.4/include\
+	     /usr/X11R6.4/include/X11/Xaw\
+	     /usr/X11R6.4/include/Xm\
+	     /usr/X11R6.4/include/X11
+
+X11_LIBS   = -L/usr/X11R6.4/lib -lXt -lXaw -lXmu  -lXext -lX11 -lSM -lICE
+CPP_LIBS   = -lstdc++
+SYS_LIBS   = $(DEBUG_LIBS) $(CPP_LIBS) -lm
+
+#GCC_FLAGS = -DLD_BUG_01
+LINK_FLAGS = -Wl,-warn-once
+ifeq ($(SHARED_LIBS),1)
+LINK_FLAGS+= $(CYG_DLL_FLAGS) -Wl,-Bdynamic
+endif
+GNU_PIC    = -DfPIC_NOT_NEEDED
+
+SYS_ERRNO_H=/usr/include/sys/errno.h
+
+MKPCCC_ARG = -nochmod
+MKOBJDIR_ARGS = -nolinks
+
+UNIX       =cygwin

@@ -1,0 +1,39 @@
+#!/usr/bin/perl -s
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: mkdrvenum,v 1.6 2007/02/04 01:38:24 dkc Exp $
+ 
+require "$defs";
+
+$sb = $#strn;
+$cc = 1;
+$cb = 0;
+while ($cc <= $#cert)             { $cc = $cc * 2; $cb++ ; }
+$sb = $sb << $cb;
+while ($sb != ($sb | ($sb >> 1))) { $sb = $sb | ($sb >> 1); }
+
+printf "  %-13s = %08x,\n","${drv}_MASK",     1 + ($sb << 1);
+printf "  %-13s = %08x,\n","${drv}_LVL_MASK", ($sb << 1) & ~$sb;
+printf "  %-13s = %08x,\n","${drv}_STRN_MASK",$sb & ~((1 << $cb) -1);
+printf "  %-13s = %08x,\n","${drv}_CERT_MASK",(1 << $cb) -1;
+
+$sv   = 0;
+foreach $s (@strn) {
+    $sign = ~$sb;
+    foreach $l (@lvls) {
+	$cv = 0;
+	foreach $c (@cert) {
+            printf "  %-13s = %08x|%02x|%02x","${drv}_$s$l$c",$sign,$sv,$cv;
+            print  ",\n";
+            $cv++;
+	}
+        $sign = 0;
+    }
+    $sv += $cc;
+}
+
+printf "  %-13s = %d,\n","${drv}_CERT_BITS",$cb;
+$b = 1;
+while ($sb) { $b++; $sb = $sb >> 1; }
+printf "  %-13s = %d,\n","${drv}STRN__BITS",$b - $cb;
+printf "  %-13s = %d\n","${drv}_BITS",$b;

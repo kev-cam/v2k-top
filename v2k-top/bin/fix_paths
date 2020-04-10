@@ -1,0 +1,43 @@
+#!/bin/csh -f
+
+set prl = `which perl`
+
+set old = /usr/local/bin/perl
+
+switch ($#argv)
+  case 2:
+    set old = ($2)
+  case 1:
+    set prl = ($1)
+    breaksw
+  default:
+    set prl = (env perl)
+endsw
+
+while ($#argv)
+  switch ($1:q)
+    case -old:
+      shift
+      set old = $1
+      breaksw
+    default:
+      break
+  endsw
+end
+
+if ( -x "$prl" || $#prl == 2) then
+  set fl = ()
+  foreach f (*)
+    if ( ! -d $f ) set fl = ($fl:q $f:q)
+  end
+  foreach pfile (`grep '^#.'$old $fl:q | cut -d: -f1 `)
+    sed "s+$old+$prl+" < $pfile >$pfile-tmp
+    if ($status) then
+      rm $pfile-tmp
+    else
+      echo Fixed $pfile
+      mv $pfile-tmp $pfile
+      chmod +x $pfile
+    endif
+  end
+endif

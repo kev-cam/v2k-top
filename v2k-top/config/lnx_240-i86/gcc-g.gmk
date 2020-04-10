@@ -1,0 +1,8 @@
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: gcc-g.gmk,v 1.2 2002/05/08 07:12:09 dkc Exp $
+ 
+
+
+OPT_CFLAGS=-g $(DEBUG_DEFS)
+include $(CONFIG_DIR)/gcc.gmk

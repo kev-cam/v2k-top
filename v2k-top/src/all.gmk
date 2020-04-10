@@ -1,0 +1,51 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.19 2007/09/20 22:29:31 dkc Exp $
+ 
+
+
+default: all
+
+SRC_DIRS:=$(subst /all.gmk,,$(wildcard */all.gmk))
+
+OVERRIDE_CLEAN=TRUE
+OVERRIDE_TAGS =TRUE
+OVERRIDE_SETUP=TRUE
+
+include $(CONFIG_DIR)/common.gmk
+
+$(subst make_common,,$(MAKE_ALL)): make_common
+
+
+rm_TAGS:
+	rm -f TAGS
+
+TAGS: rm_TAGS
+	for d in $(SRC_DIRS) ; do\
+	  (cd $$d ; rm TAGS ; $(MK_SCRIPT) -fast TAGS >/dev/tty;\
+	  sed "s+.*$$HOME+$$HOME+" <etags ; rm etags) >> $@;\
+	done
+
+setup:
+	for d in $(SRC_DIRS) ; do (cd $$d ; $(MK_SCRIPT) setup) ; done
+
+dirs:
+	@echo $(SRC_DIRS)
+
+sn:
+	rm -f /tmp/v2k-src
+	ln -s `pwd` /tmp/v2k-src
+	snavigator sn.proj &
+
+clean:
+	$(MK_SCRIPT) -fast all DIR_TARGET="-fast clean"
+
+cln_obj:
+	$(MK_SCRIPT) -fast all DIR_TARGET="-fast clean_obj"
+
+CLEAN:	rm_TAGS
+	$(MK_SCRIPT) -fast all DIR_TARGET="-fast CLEAN"
+	rm -f $(OBJ_EXE_DIR)/genparse $(OBJ_EXE_DIR)/v2k*
+	cd .. ; find . -name \*.tok -follow -exec rm {} \;
+
+all: $(MAKE_ALL)

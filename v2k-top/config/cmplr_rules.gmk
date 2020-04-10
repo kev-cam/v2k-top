@@ -1,0 +1,41 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: cmplr_rules.gmk,v 1.18 2009/10/30 17:03:14 dkc Exp $
+ 
+
+
+OPTLVL    =2
+DBGLVL    =2
+OPT_DEFS  =-DOPTLVL=$(OPTLVL)
+DEBUG_DEFS=-DDBGLVL=$(DBGLVL)
+
+ifndef GNU_PIC
+GNU_PIC   =-fPIC
+endif
+
+ifeq ($(SHARED_LIBS),0)
+ifeq ($(STATIC_LIBS),0)
+STATIC_LIBS=1
+CMODEX:=$(CMODEX)-a
+endif
+endif
+
+$(OBJ_DIR)/%$(CMODE)$(CMODEX)$(OBJ)::%.c
+	$(COMPILE_C) -c -o $@ $<
+
+%-e.c::$(OBJ_DIR)/%.c-dep
+	rm -f $(subst -e,-E,$@);
+	$(COMPILE_C) -E $(subst -e,,$@) |\
+	     sed 's+^#+//+' > $(subst -e,-E,$@) ; chmod -w $(subst -e,-E,$@)
+
+$(OBJ_DIR)/%$(CMODE)$(CMODEX)$(OBJ)::%.cpp
+	$(COMPILE_CXX) -c -o $@ $<
+
+%-e.cpp::
+	rm -f $(subst -e,-E,$@);
+	$(COMPILE_CXX) -C -E $(subst -e,,$@) |\
+	     sed 's+^#+//+' > $(subst -e,-E,$@) ; chmod -w $(subst -e,-E,$@)
+
+O_FILES=$(patsubst %.c,  $(OBJ_DIR)/%$(CMODE)$(CMODEX)$(OBJ_PRFX).o,$(C_FILES))\
+        $(patsubst %.cpp,$(OBJ_DIR)/%$(CMODE)$(CMODEX)$(OBJ_PRFX).o,$(CXX_FILES))
+

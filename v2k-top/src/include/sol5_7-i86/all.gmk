@@ -1,0 +1,17 @@
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.2 2002/05/08 07:09:09 dkc Exp $
+ 
+
+
+default: all
+
+H_FILES=padding.h system.h
+
+ifndef CONFIG_DIR
+CONFIG_DIR=$(HOME)/$(PROJECT)-$(VERSION)/config
+endif
+
+include $(CONFIG_DIR)/common.gmk
+
+all: syserrs-a.h

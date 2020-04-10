@@ -1,0 +1,5 @@
+*_obj
+TAGS
+*-*.h
+*-*.cpp
+version.h

@@ -1,0 +1,14 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: punctuation.tdf,v 1.10 2007/02/01 06:49:07 dkc Exp $
+#
+,	COMMA
+.	PERIOD
+:	COLON
+;	SCOLON
+[       OPN_SQ
+]       CLS_SQ
+(       OPN_BR
+)       CLS_BR
+{       OPN_CR
+}       CLS_CR

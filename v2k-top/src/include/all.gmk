@@ -1,0 +1,46 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.35 2020/04/07 05:25:31 dkc Exp $
+
+default: all
+
+H_FILES:=$(shell ls *.h)
+
+INC_FILES:=$(shell ls *.inc)
+VFN_FILES:=$(shell ls *.vfn)
+FLD_FILES:=$(shell ls *.fld)
+DSC_FILES:=$(subst .fld,-dsc.h,$(FLD_FILES))
+
+ifndef CONFIG_DIR
+CONFIG_DIR=$(HOME)/$(PROJECT)-$(VERSION)/config
+endif
+
+CLEANABLE=*-dsc.h *-rop.cpp *-pp.h
+
+include $(CONFIG_DIR)/common.gmk
+
+ifndef IGNORE_DEPS
+include $(OBJ_DIR)/deps.gmk
+endif
+
+vprim.inc gates.h: gates.proto $(PROJECT_DIR)/bin/mkgate
+	mkgate -vprim=../include/vprim.inc <$< >$@
+
+sim_arith.h sim_arith.inc: arith_1.inc arith_2.inc ../../bin/ovrldop
+	ovrldop -uni=arith_1.inc -bi=arith_2.inc\
+		-code=sim_arith.inc -hdr=sim_arith.h
+
+drive.inc: $(PROJECT_DIR)/bin/mkdrvenum drive.pl
+	mkdrvenum -defs=drive.pl > $@
+
+version.h: $(CONFIG_DIR)/$(PROJECT)-version.gmk all.gmk
+	(echo "// Auto-generated";\
+	 echo "#define $(PROJECT_UC)_MAJOR_VERSION $(V2K_MAJOR_VERSION)";\
+	 echo "#define $(PROJECT_UC)_MINOR_VERSION $(V2K_MINOR_VERSION)";\
+         echo "#define $(PROJECT_UC)_STR_VERSION "'"'$(V2K_MAJOR_VERSION).$(V2K_MINOR_VERSION)'"' )\
+		> version.h
+
+all: $(DSC_FILES) version.h gates.h sim_arith.h\
+                  $(INC_SYS_DIR)/syserrs-a.h
+	@echo Headers OK: ;\
+	      ls -l  version.h gates.h sim_arith.h $(INC_SYS_DIR)/syserrs-a.h

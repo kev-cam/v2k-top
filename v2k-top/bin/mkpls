@@ -1,0 +1,215 @@
+#!/usr/bin/perl -s
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: mkpls,v 1.19 2010/05/13 18:34:54 dkc Exp $
+ 
+if (defined($in))  {
+    open (STDIN, "$in");
+    $_ = $in;
+    s+.*/++; s/\..*//;
+    tr /[a-z]/[A-Z]/;
+    $pool = $_;
+}
+
+if (defined($out)) {
+    $_ = $out;
+    if (!m+/+) {$_="$inc/$_";}
+    open (STDOUT,">$_");
+    s/-dsc.h/-rop.cpp/;
+    $rop = $_;
+}
+
+print "/* Created by mkpls */\n\n";
+
+if (defined($rop)) {
+    open (ROP,">$rop");
+}
+
+if (defined($predef)) {
+    open (PRDF,"$predef") or open(PRDF,"$inc/$predef");
+    while(<PRDF>) {
+	if (/DECL.*\(\s*(.*?)\s*\)/) {
+	    $decls{$1} = 1;
+        }
+    }
+}
+
+$union = -1;
+
+$usetype{8} ="char";
+$usetype{16}="short";
+
+sub dmp($)
+{
+    $line      = $_[0];
+    $#do_decls = -1;
+
+    if ($union >= 0) {
+
+        $_    = $name;
+	tr /[a-z]/[A-Z]/;
+        $NAME = $_;
+	print "\n#define ${NAME}_FIELDS \\\n";
+	$subs = 0;
+        $arr = "s_${name}";
+        $own = "s_${name}_own";
+        foreach $_ (@strct) {
+            if (/STRUCT/) {
+		$subs++;
+		s/ *STRUCT *//;
+		s/;.*//;
+		$s = $_;
+                tr/a-z/A-Z/;
+		print "  ${_}_FIELDS\\\n";
+	    } elsif ("" ne $_) {
+		s/;.*//;
+                $i = eval '$#'."$arr";
+		eval '$'.$arr.'['.(1+$i).'] = "'.$_.'"';
+                $o = eval '$#'."$own";
+		eval '$'.$own.'['.(1+$o).'] = "'.$_.'"';
+                if (/:/) {
+                  @flds = split /:|;/;
+                  $sz   = $flds[1];
+                  @flds = split /\s+/,$flds[0];
+		  while ("" eq $flds[0]) { shift @flds; }
+                  $_ = "\tBITF($flds[0],$flds[1],$sz,$usetype{$sz})";
+                }
+		print "$_;\\\n";
+                if (/REF\(\s*(.*?)\s*\)/) {
+                    if (!defined $decls{$1}) {
+                        $do_decl[$#do_decl +1] = $1;
+                    }
+                }
+	    }
+        }
+        print "\n";
+
+        foreach $d (@do_decl) {
+            if (!defined $decls{$d}) {
+                if ($pre_u{$d}) {
+		    print "typedef union ${d}_u $d;\n";
+                } else {
+		    print "typedef struct ${d}_s $d;\n";
+                }
+                print "#ifndef DECL_${d}\n",
+                      "#define DECL_${d}\n",
+                      "extern FieldDesc ${d}Desc[];\n",
+                      "DECL_REF($d)\n",
+                      "DECL_IREF($d)\n",
+                      "DECL_XREF($d)\n",
+                      "#endif /* DECL_${d} */\n";
+                $decls{$d} = 1;
+            }
+        }
+
+ 	print "\n#define\t${NAME}_FIELDS_OWN \\\n";
+        if ($subs) {
+	    foreach $_ (eval '@'.$own) {print "$_;\\\n";}
+	} else {
+	    print "\t${NAME}_FIELDS\n";
+	}
+
+	if ($union) {print "\nunion ${name}_u {\n";}
+	else        {print "\nstruct ${name}_s {\n";}
+	print "${NAME}_FIELDS\n",
+              "};\n\n";
+        if (!defined $decls{$name}) {
+            if ($union || $pre_u{$name}) {
+                print "typedef union ${name}_u $name;\n";
+            } else {
+                print "typedef struct ${name}_s $name;\n";
+            }
+            print "DECL_REF($name)\n",
+                  "DECL_IREF($name)\n",
+                  "DECL_XREF($name)\n";
+            $decls{$name} = 1;
+        }
+	@flds = split /\s+/,eval '$'.$arr.'[0]';
+	$_ = $flds[2];
+	s/[:\[].*//;
+	print "#define ${NAME}_FUNC\\\n",
+	      "\tinline $name *${name}_Data() const {return ($name *)&$_;};\n",
+	      "\n";
+
+        print "#define\t${NAME}_FF ${NAME}_FIELDS ${NAME}_FUNC\n\n";
+
+        print "#ifdef ${pool}_DESC\n",
+              "#ifdef THIS_CLASS\n",
+              "#define ${name}_class THIS_CLASS\n",
+              "#else\n",
+              "#define ${name}_class $name\n",
+              "#endif\n",
+              "FieldDesc ${name}Desc[] = {\n",
+	      '{"","',$name,'",',"sizeof($name),$union},\n";
+
+        foreach $_ (eval '@s_'.$name) {
+	    @fld  = split;
+            $_    = $fld[1];
+            $sz   = "sizeof($fld[0])";
+            $desc = 0;
+            if (/:/) {
+		@cln = split ':';
+		$fld[1] = $cln[0];
+		if    ($cln[1] eq "8")  {$fld[0] = "char";}
+		elsif ($cln[1] eq "16") {$fld[0] = "short";}
+		else                    {$fld[0] = "bf-".$cln[1];}
+		$sz  = "sizeof($fld[0])";
+	    } elsif (/\[\]/) {
+		$sz  = "0";
+            }
+            if (/ARRAY/) {
+                @arr    = split 'ARRAY.*\(|\)';
+                $fld[1] = $arr[1];
+            }
+            $_ = $fld[0];
+            if (/[I|X]REF/) {
+                @ref  = split 'REF\(|\)';
+                $desc = $ref[1]."Desc";
+            }
+            print '{"',$fld[0],'","',$fld[1],'",',"\t$sz,\tOffsetOf(${name}_class,$fld[1]),$desc},\n";
+        }
+        print "{0,0,0,0,0}};\n",
+              "#else\n",
+              "extern FieldDesc ${name}Desc[];\n",
+	      "#endif\n\n";
+
+        print ROP "\nDECL_IDEREF($name)\n",
+                  "DECL_XDEREF($name)\n";
+    }
+
+    $#strct = 0;
+    $_      = $line;
+}
+
+print "#ifndef ${pool}_H\n",
+      "#define ${pool}_H\n\n",
+      "#ifndef REF_H\n",
+      '#include "ref.h"',"\n",
+      "#endif\n",
+      "#ifndef DESC_H\n",
+      '#include "desc.h" /* for FieldDesc */',"\n",
+      "#endif\n";
+
+while (<>) {
+    chomp;
+    if (/UNION/)   {
+        if (/;/) {
+            s/UNION *//; s/ *; *//;
+            $pre_u{$_} = 1;
+        } else {
+            dmp($_); s/UNION *//; chomp; $name = $_; $union = 1;
+        }
+    } elsif (/^STRUCT/) {
+        dmp($_); $union  = 0; s/STRUCT *//; chomp; $name = $_;
+    } elsif (/POOL/) {
+        @flds = split;
+        tr /[a-z]/[A-Z]/;
+        $pool = "${flds[1]}_POOL";
+    } elsif (!/^#/ && "" ne $_) {
+        $strct[@strct] = $_;
+    }
+}
+
+dmp($_);
+
+print "\n#endif /* ${pool}_H */\n",

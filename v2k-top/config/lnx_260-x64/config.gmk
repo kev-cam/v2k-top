@@ -1,0 +1,47 @@
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: config.gmk,v 1.1 2009/11/28 08:12:10 dkc Exp $
+ 
+
+
+GTAR       =tar
+LD         =cc
+
+OBJ        = .o
+
+ECHON      =echo -n
+RM         =rm
+ifndef AR_CR
+AR_CR      =ar cr
+endif
+ifndef AR_UPDATE
+AR_UPDATE  =u
+endif
+ifndef LD_OUT
+LD_OUT     =-o
+endif
+ifndef LD_SO
+LD_SO      =-shared
+endif
+
+LIB_PRFX   =lib
+LIB_TYPE_A =.a
+LIB_TYPE_SO=.so
+
+USE_LIBS   = -L$(OBJ_LIB_DIR)
+
+X11_INC    = /usr/include/X11/\
+	     /usr/include/X11/Xaw/
+
+X11_LIBS   = -L/usr/X11R6/lib -lXt -lXaw -lXmu -lX11
+ifndef USR_NOTHREADS
+THREAD_LIB = -lpthread
+endif
+ifdef NEED_TERMCAP
+TERMCAP_LIB= -ltermcap
+endif
+SYS_LIBS   = $(DEBUG_LIBS) -lm -lnsl -lresolv -ldl $(TERMCAP_LIB) $(THREAD_LIB)
+
+SYS_ERRNO_H=/usr/include/asm/errno.h
+
+UNIX       =linux

@@ -1,0 +1,19 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: all.gmk,v 1.8 2003/01/14 02:25:58 dkc Exp $
+ 
+
+
+default: all
+
+OVERRIDE_SETUP=TRUE
+
+SCRIPTS=*.pm $(shell ls -d * | egrep -v '\.|~|C' )
+
+include $(CONFIG_DIR)/common.gmk
+
+setup:
+	@echo OK
+
+all:
+	@echo Nothing to do

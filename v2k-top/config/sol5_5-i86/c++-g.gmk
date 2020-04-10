@@ -1,0 +1,8 @@
+# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: c++-g.gmk,v 1.4 2002/05/08 07:12:09 dkc Exp $
+ 
+
+
+OPT_CXXFLAGS=-g $(DEBUG_DEFS)
+include $(CONFIG_DIR)/sunpro-c++.gmk

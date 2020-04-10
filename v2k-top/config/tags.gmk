@@ -1,0 +1,17 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: tags.gmk,v 1.14 2003/01/14 02:26:01 dkc Exp $
+ 
+
+
+ifndef OVERRIDE_TAGS
+TAGS:
+	PWD=`pwd` \
+	etags -a $(foreach f,$(CXX_FILES) $(C_FILES) $(H_FILES),$$PWD/$f)\
+	      -o etags
+	rm -f TAGS
+	ln -s $(PROJECT_ROOT)/$(PROJECT)-$(VERSION)/src/TAGS .
+endif
+
+tags:
+	$(MK_SCRIPT) -cd $(PROJECT_ROOT)/$(PROJECT)-$(VERSION)/src TAGS

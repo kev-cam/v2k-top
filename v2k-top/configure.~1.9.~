@@ -1,0 +1,87 @@
+#!/bin/csh -f
+
+if ( -d bin ) then
+  eval `bin/mk.csh -cshmc`
+else
+  if ( ! -d export ) then
+    echo "Expected an export or bin in $cwd."
+    exit 1
+  endif
+# precompiled
+  chmod -R a+r .
+  chmod -R a+x export/bin
+  eval `export/bin/mk.csh -cshmc`
+  mkdir bin
+  mkdir lib
+  ln -s export/include     
+  ln -s ../export/bin/v2k.csh bin/v2k
+  ln -s ../export/bin/mk.csh  bin/mk
+  foreach obj (`cd export/bin ; echo *_obj{,-64}`)
+    ln -s ../export/bin/$obj bin/$obj
+    ln -s ../export/lib/$obj lib/$obj
+  end
+  if ( -d examples ) then
+    cd examples
+    echo -n "Run tests? [y/n]:"
+    set yn = $<
+    switch ($yn) 
+      case {y,Y}*:
+      ./test.csh
+    endsw
+  endif
+  exit 0
+endif
+
+
+if ( ! -x bin/mk  ) ln -s mk.csh  bin/mk
+if ( ! -x bin/v2k ) ln -s v2k.csh bin/v2k
+
+set v2kb = $cwd/bin
+set opth = ($path:q)
+set path = ($v2kb $path:q)
+
+bin/mk README >& /dev/null
+
+switch ($OBJ_DIR)
+  case obj:
+    echo "Known configurations are:"
+
+    foreach u (config/*-*/uname)
+      set uname = (`cat $u`)
+      echo "$uname[1] $uname[3] $uname[5]"
+      eval `bin/mk.csh -cshmc -uname $u:q`
+      echo "OBJ_DIR = $OBJ_DIR"
+      echo "SYS_LP  = $SYS_LP"
+      echo "SYS_OS  = $SYS_OS"
+      echo "SYS_CPU = $SYS_CPU"
+    end  
+    exit 1
+
+  default:
+    echo "V2K is pre-configured for your system."
+    if (! -x /usr/local/bin/perl) then
+      echo Fixing paths...
+      (cd bin ; csh -f fix_paths)
+    endif
+    echo -n "Build v2k? [y/n]:"
+    set yn = $<
+    set shrd2 = 1
+    if (! $#argv) then
+      switch ($SYS_OS)
+        case cyw:
+          set argv  = (GPP_VERSION=-V4.3.2)
+	  set path  = ($v2kb /usr/local/bin /usr/bin $opth:q)
+          set shrd2 = 0
+          breaksw
+      endsw
+    endif
+    switch ($yn) 
+      case {y,Y}*:
+        mk $*:q setup
+        mk $*:q apps -sttc
+        if ($shrd2) then
+          find . -name \*.o -exec rm {} \;
+          mk $*:q apps -shrd
+        endif
+    endsw
+endsw

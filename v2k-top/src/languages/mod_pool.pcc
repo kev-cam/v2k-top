@@ -1,0 +1,1068 @@
+/* Copyright (c) 1998-2007 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: */ extern "C" const char * mod_pool_pcc_rcsid() {return "$Id: mod_pool.pcc,v 1.57 2009/07/08 08:42:14 dkc Exp $";}
+
+#define CLASS_FILE MOD_POOL
+#define VERILOG3
+#define VERILOG4
+
+#include "system.h"
+#include "error.h"
+#include "assertions.h"
+#include "poolmngr.h"
+#include "v2k_mem.h"
+#define NEED_VERILOG
+#include "tokpool.h"
+#include "verilog.h"
+#include "mod_pool.h"
+#include "arith.h"
+
+/************************************************************************
+
+  NB: pointers based on references are volatile, always recalculate a
+      pointer after creating new objects in its pool.
+
+*************************************************************************/
+
+#define THIS_EXPR TemplateExpr
+
+class TemplateModulePool : public TemplatePoPool {
+#undef  POOL_CLASS
+#define POOL_CLASS   Module
+#undef  THIS_CLASS
+#define THIS_CLASS   TemplateModulePool
+// THIS_CLASS = TemplateModulePool
+#undef  PARENT_CLASS
+#define PARENT_CLASS TemplatePoPool
+// PARENT_CLASS = TemplatePoPool
+public:
+#include "TemplateModulePool.fld"
+#define INHERIT_MINIMIZE
+#define INHERIT_CLOSE
+#define CAN_MAP_TF 
+#include "TemplatePool.vfn"
+#include "TemplateModulePool.vfn"
+
+  // PRIVATE
+
+  inline TemplateModulePool *me() const {
+    return (TemplateModulePool *)self;
+  };
+  inline TemplateModulePool *mi() const {
+    return (TemplateModulePool *)PoolMngr->pool(mngr_indx);
+  };
+  inline TemplateModulePool *mod_pool(int id)
+  {
+    return (TemplateModulePool *)(PoolMngr->pool(id));
+  };
+
+  // PUBLIC
+
+  void    Init();
+};
+
+TemplateModulePool:: TemplateModulePool()    {}
+TemplateModulePool:: TemplateModulePool(int) {}
+TemplateModulePool::~TemplateModulePool()    {}
+
+int TemplateModulePool::dumpAscii(const char *file)
+{
+  return STS_NIY;
+}
+
+ePM TemplateModulePool::changeMode(ePM to)
+{
+#include "../common/convert.icc"
+  return old;
+}
+
+sFieldDesc *TemplateModulePool::description()
+{
+  static sFieldDesc Description[] = {
+#include "TemplateModulePool-dsc.h"
+  };
+
+  return Description;
+}
+
+#include "../common/describe.icc"
+
+void TemplateModulePool::plSaveBranch(XREF(plBranch) rb,Branch *bra)
+{
+  poolRef       ref  = NullRef,
+               *pRef = bra->name;
+  int           c    = 0;
+  XREF(plExpr)  x1,
+                x2;
+
+  if (pRef) {
+     while (!NULL_REF(pRef[c])) c++;
+     pRef = (poolRef *)allocAligned(++c * sizeof(poolRef),8,&ref,ALC_PERM);
+     while (c-- > 0) pRef[c] = bra->name[c];
+  }
+
+  x1 = plSaveExpr(bra->p1);
+  x2 = plSaveExpr(bra->p2);
+
+  plBranch *plb = P(rb);
+  plb->p1       = I(x1);
+  plb->p2       = I(x2);
+  IREF2MODE(ref,&plb->name);
+}
+
+void TemplateModulePool::plSaveScope(XREF(plScope) srf,Scope *p)
+{
+  XREF(plStmtAny)  pls = makeStmts(A_STMT(p->stmt));
+  plScope         *ps  = P(srf);
+
+  ps->stmt = I(pls);
+
+  plSaveStmt(pls,p->stmt);
+}
+
+void TemplateModulePool::plSavePrtdObj(XREF(plPrtdObj) rpo,
+                                       PrtdObj *pp,
+                                       poolRef name,long stmt_count,Stmt *stmt,
+                                       Stmt *u_stmt)
+{
+  poolRef    ref;
+  plPrtdObj *plpo = P(rpo);
+  int        n,
+             l,
+             prt = plpo->ports   = pp->port()->count(),
+             scp = plpo->scopes  = pp->scope()->count(),
+             prm = plpo->parms   = pp->parm()->count(),
+             atr = plpo->attrs   = pp->attr()->count(),
+             brn = plpo->branchs = pp->branch()->count(),
+             stm = plpo->stmts   = stmt_count;
+
+  plpo->name = name;
+
+  allocAligned(prt * sizeof(plPort),        8,&ref,ALC_PERM);
+  IREF2MODE(ref,&P(rpo)->port);
+  allocAligned(scp * sizeof(plScope),       8,&ref,ALC_PERM);
+  IREF2MODE(ref,&P(rpo)->scope);
+  allocAligned(prm * sizeof(MAX_PLATTR_OBJ),8,&ref,ALC_PERM);
+  IREF2MODE(ref,&P(rpo)->parm);
+  allocAligned(atr * sizeof(MAX_PLATTR_OBJ),8,&ref,ALC_PERM);
+  IREF2MODE(ref,&P(rpo)->attr);
+  allocAligned(brn * sizeof(plBranch),      8,&ref,ALC_PERM);
+  IREF2MODE(ref,&P(rpo)->branch);
+
+  XREF(plStmtAny) rs = makeStmts(stmts);
+  P(rpo)->stmt       = I(rs);
+
+  XREF(plPort) prf = X(P(rpo)->port);
+  for (n = 0; n < prt; n++) {
+    plSavePort(prf,pp->port_map(n));
+    INCR_REF(prf);
+  }
+
+  XREF(plScope) scrf = X(P(rpo)->scope);
+  for (n = 0; n < scp; n++) {
+    plSaveScope(scrf,pp->scope_map(n));
+    INCR_REF(scrf);
+  }
+
+  XREF(plBranch) brf = X(P(rpo)->branch);
+  for (n = 0; n < brn; n++) {
+    plSaveBranch(brf,pp->branch_map(n));
+    INCR_REF(brf);
+  }
+
+  XREF(plRngdAttr) arf = X(P(rpo)->parm);
+  for (n = 0; n < prm; n++) {
+    plSaveAttr(*(XREF(plAttr) *)&arf,pp->parm_map(n));
+    INCR_REF(arf);
+  }
+
+  arf = X(P(rpo)->attr);
+  for (n = 0; n < atr; n++) {
+    plSaveAttr(*(XREF(plAttr) *)&arf,pp->attr_map(n));
+    INCR_REF(arf);
+  }
+
+  if (stmt) plSaveStmt(rs,stmt);
+
+  if (u_stmt) {
+    long u           = u_stmt->usage()->count();
+    XREF(plUsage) us = makeUsage(&u,u_stmt->usage()->first());
+    plpo             = P(rpo);
+    plpo->usage      = I(us);
+    plpo->usages     = u;
+  } else {
+    plpo             = P(rpo);
+    plpo->usages     = 0;
+  }
+
+#if DBGLVL > 1
+  scrf = X(plpo->scope);
+  for (n = 0; n < scp; n++) {
+    Scope   *p  = pp->scope_map(n);
+    plScope *ps = P(scrf);
+    assert(SAME_REF(ps->name,p->name) && ps->up   == p->up
+                                      && ps->dpth == p->dpth);
+    INCR_REF(scrf);
+  }
+#endif
+}
+
+int TemplateModulePool::plSaveUnknown(XREF(plUnknown) ur,Unknown *unk)
+{
+  if (REF_UNKNOWN == unk->rtyp)
+  {
+    plUnknown *plu = P(ur);
+
+    plu->scp  = unk->scp;
+    plu->rff  = unk->rff;
+    plu->rtyp = unk->rtyp;
+    plu->nm   = *(poolRef *)&unk->ref;
+
+    return 1;
+  }
+
+  return 0;
+}
+
+void TemplateModulePool::plSaveStmtAnalog(XREF(plStmtAnalog) ra,StmtAnalog *astmt)
+{
+  long            n  = astmt->usage()->count();
+  XREF(plStmtAny) rs = makeStmts(A_STMT(astmt->child));
+  XREF(plUsage)   us = makeUsage(&n,astmt->usage()->first());
+  plStmtAnalog   *pa = P(ra);
+
+  pa->child          = I(rs);
+  pa->name           = astmt->name;
+  pa->usages         = n;
+  pa->usage          = I(us);
+  plSaveStmt(rs,astmt->child);
+}
+
+void TemplateModulePool::plSaveStmtDecl(XREF(plStmtDecl) rd,StmtDecl *dstmt)
+{
+  poolRef         ref;
+  int             c  = dstmt->stmt_count;
+  XREF(plStmtAny) rs = makeStmts(c);
+
+  plSaveStmt(rs,dstmt->child);
+
+  if (dstmt->lcls) {
+    allocAligned(sizeof(plPrtdObj),8,&ref,ALC_PERM);
+    XREF(plPrtdObj) rd;
+    IREF2MODE(ref,&rd);
+    plSavePrtdObj(rd,dstmt->lcls,NullRef,0,0,0);
+  } else {
+    ref.pool = ref.index = 0;
+  }
+
+  plStmtDecl *pls = P(rd);
+  pls->stmts      = c;
+  pls->stmt       = I(rs);
+  IREF2MODE(ref,&pls->lcls);
+}
+
+void TemplateModulePool::plSaveStmtBlock(XREF(plStmtBlock) rs,StmtBlock *bstmt)
+{
+  plSaveStmtDecl(*(XREF(plStmtDecl) *)&rs,(StmtDecl *)bstmt);
+}
+
+void TemplateModulePool::plSaveStmtFor(XREF(plStmtFor) rs,StmtFor *fstmt)
+{
+  XREF(plStmtAny)  rf = makeStmts(A_STMT(fstmt->child));
+  XREF(plExpr)     a1 = plSaveExpr(fstmt->ass1),
+                   xp = plSaveExpr(fstmt->expr),
+                   a2 = plSaveExpr(fstmt->ass2);
+  plStmtFor       *pf = P(rs);
+  pf->child           = I(rf);
+  pf->ass1            = I(a1);
+  pf->expr            = I(xp);
+  pf->ass2            = I(a2);
+  plSaveStmt(rf,fstmt->child);
+}
+
+void TemplateModulePool::plSaveStmtGen(XREF(plStmtGen) rg,StmtGen *gstmt)
+{
+  XREF(plStmtAny)  rf = makeStmts(A_STMT(gstmt->child));
+  XREF(plExpr)     xp = plSaveExpr(gstmt->expr);
+  plStmtGen       *pg = P(rg);
+  pg->child           = I(rf);
+  pg->cntr            = gstmt->cntr;
+  pg->expr            = I(xp);
+  plSaveStmt(rf,gstmt->child);
+}
+
+void TemplateModulePool::plSaveStmtIfNone(XREF(plStmtIfNone) ri,StmtIfNone *istmt)
+{
+  XREF(plStmtAny)  rf = makeStmts(A_STMT(istmt->child_f)),
+                   rt = makeStmts(A_STMT(istmt->child_t));
+  XREF(plExpr)     xp = plSaveExpr(istmt->expr);
+  plStmtIfNone    *pi = P(ri);
+  pi->child_f         = I(rf);
+  pi->child_t         = I(rt);
+  pi->expr            = I(xp);
+  plSaveStmt(rf,istmt->child_f);
+  plSaveStmt(rt,istmt->child_t);
+}
+
+void TemplateModulePool::plSaveStmtIf(XREF(plStmtIf) ri,StmtIf *istmt)
+{
+  XREF(plStmtAny)  rf = makeStmts(A_STMT(istmt->child_f)),
+                   rt = makeStmts(A_STMT(istmt->child_t));
+  XREF(plExpr)     xp = plSaveExpr(istmt->expr);
+  plStmtIf        *pi = P(ri);
+  pi->child_f         = I(rf);
+  pi->child_t         = I(rt);
+  pi->expr            = I(xp);
+  plSaveStmt(rf,istmt->child_f);
+  plSaveStmt(rt,istmt->child_t);
+}
+
+void TemplateModulePool::plSaveStmtCase(XREF(plStmtCase) rs,StmtCase *cstmt)
+{
+  int            n  = 0;
+  case_s        *cs = cstmt->list;
+  poolRef        ref;
+  XREF(plCaseS)  rc;
+
+  for (; cs ; cs = cs->next,n++);
+
+  allocAligned(n * sizeof(plCaseS),8,&ref,ALC_PERM);
+  IREF2MODE(ref,&rc);
+
+  plStmtCase *pls = P(rs);
+  pls->casess = n;
+  pls->cases  = I(rc);
+
+  for (cs = cstmt->list; cs ; cs = cs->next, INCR_REF(rc)) {
+    XREF(plStmtAny) pls = makeStmts(A_STMT(cs->child));
+    XREF(plExpr)    xpr = plSaveExpr(cs->expr);
+    plCaseS        *pc  = P(rc);
+    pc->expr            = I(xpr);
+    pc->child           = I(pls);
+  }
+}
+
+void TemplateModulePool::plSaveStmtCaseX(XREF(plStmtCaseX) rx,StmtCaseX *cstmt)
+{
+  plSaveStmtCase(*(XREF(plStmtCase) *)&rx,(StmtCase *)cstmt);
+}
+
+void TemplateModulePool::plSaveStmtCaseZ(XREF(plStmtCaseZ) rz,StmtCaseZ *cstmt)
+{
+  plSaveStmtCase(*(XREF(plStmtCase) *)&rz,(StmtCase *)cstmt);
+}
+
+void TemplateModulePool::plSaveStmtDefparam(XREF(plStmtDefparam) rd,StmtDefparam *dstmt)
+{
+  XREF(plExpr)    px  = plSaveExpr(dstmt->expr);
+  plStmtDefparam *pls = P(rd);
+  pls->expr           = I(px);
+}
+
+void TemplateModulePool::plSaveStmtAlways(XREF(plStmtAlways) ra,StmtAlways *astmt)
+{
+  XREF(plStmtAny) rs = makeStmts(A_STMT(astmt->child));
+  long            n  = astmt->usage()->count();
+  XREF(plUsage)   us = makeUsage(&n,astmt->usage()->first());
+
+  plStmtAlways *pls  = P(ra);
+  pls->name          = astmt->name;
+  pls->child         = I(rs);
+  pls->usages        = n;
+  pls->usage         = I(us);
+  plSaveStmt(rs,astmt->child);
+}
+
+void TemplateModulePool::plSaveStmtForever(XREF(plStmtForever) rf,
+                                           StmtForever *fstmt)
+{
+  XREF(plStmtAny)  rs  = makeStmts(A_STMT(fstmt->child));
+  plStmtForever   *pls = P(rf);
+  pls->child           = I(rs);
+  plSaveStmt(rs,fstmt->child);
+}
+
+void TemplateModulePool::plSaveStmtSpec(XREF(plStmtSpec) rs,StmtSpec *sstmt)
+{
+  plSaveStmtDecl(*(XREF(plStmtDecl) *)&rs,(StmtDecl *)sstmt);
+}
+
+void TemplateModulePool::plSaveStmtFork(XREF(plStmtFork) rf,StmtFork *fstmt)
+{
+  plSaveStmtDecl(*(XREF(plStmtDecl) *)&rf,(StmtDecl *)fstmt);
+}
+
+void TemplateModulePool::plSaveStmtRepeat(XREF(plStmtRepeat) rr,StmtRepeat *rstmt)
+{
+  XREF(plStmtAny) rs  = makeStmts(A_STMT(rstmt->child));
+  XREF(plExpr)    xpr = plSaveExpr(rstmt->expr);
+  plStmtRepeat   *pls = P(rr);
+  pls->child          = I(rs);
+  pls->expr           = I(xpr);
+  plSaveStmt(rs,rstmt->child);
+}
+
+void TemplateModulePool::plSaveStmtWhile(XREF(plStmtWhile) rw,StmtWhile *wstmt)
+{
+  XREF(plStmtAny)  rs  = makeStmts(A_STMT(wstmt->child));
+  XREF(plExpr)     xpr = plSaveExpr(wstmt->expr);
+  plStmtWhile     *pls = P(rw);
+  pls->child           = I(rs);
+  pls->expr            = I(xpr);
+  plSaveStmt(rs,wstmt->child);
+}
+
+void TemplateModulePool::plSaveStmtAssign(XREF(plStmtAssign) ra,StmtAssign *astmt)
+{
+  XREF(plExpr)  xpr = plSaveExpr(astmt->expr),
+                dly = plSaveExpr(astmt->delay);
+  long          n   = astmt->usage()->count();
+  XREF(plUsage) us  = makeUsage(&n,astmt->usage()->first());
+
+  plStmtAssign *pls = P(ra);
+  pls->name         = astmt->name;
+  pls->expr         = I(xpr);
+  pls->usages       = n;
+  pls->usage        = I(us);
+  pls->delay        = I(dly);
+}
+
+void TemplateModulePool::plSaveStmtDeassign(XREF(plStmtDeassign)  rd,
+                                            StmtDeassign         *dstmt)
+{
+  XREF(plExpr)    xpr = plSaveExpr(dstmt->expr);
+  plStmtDeassign *pls = P(rd);
+  pls->expr           = I(xpr);
+}
+
+void TemplateModulePool::plSaveStmtDisable(XREF(plStmtDisable)  rd,
+                                           StmtDisable         *dstmt)
+{
+  XREF(plExpr)   xpr = plSaveExpr(dstmt->expr);
+  plStmtDisable *pls = P(rd);
+  pls->expr          = I(xpr);
+}
+
+void TemplateModulePool::plSaveStmtForce(XREF(plStmtForce) rf,StmtForce *fstmt)
+{
+  XREF(plExpr)  xpr = plSaveExpr(fstmt->expr);
+  plStmtForce  *pls = P(rf);
+  pls->expr         = I(xpr);
+}
+
+void TemplateModulePool::plSaveStmtRelease(XREF(plStmtRelease)  rr,
+                                           StmtRelease         *rstmt)
+{
+  XREF(plExpr)   xpr = plSaveExpr(rstmt->expr);
+  plStmtRelease *pls = P(rr);
+  pls->expr          = I(xpr);
+}
+
+void TemplateModulePool::plSaveStmtWait(XREF(plStmtWait) rw,StmtWait *wstmt)
+{
+  XREF(plStmtAny) rs  = makeStmts(A_STMT(wstmt->child));
+  XREF(plExpr)    xpr = plSaveExpr(wstmt->expr);
+  plStmtWait     *pls = P(rw);
+  pls->expr           = I(xpr);
+  pls->child          = I(rs);
+  plSaveStmt(rs,wstmt->child);
+}
+
+void TemplateModulePool::plSaveStmtAt(XREF(plStmtAt) ra,StmtAt *astmt)
+{
+  XREF(plStmtAny) rs  = makeStmts(A_STMT(astmt->child));
+  XREF(plExpr)    xpr = plSaveExpr(astmt->expr);
+  plStmtAt       *pls = P(ra);
+  pls->expr           = I(xpr);
+  pls->child          = I(rs);
+  plSaveStmt(rs,astmt->child);
+}
+
+void TemplateModulePool::plSaveStmtDelay(XREF(plStmtDelay) rd,StmtDelay *dstmt)
+{
+  XREF(plStmtAny) rs  = makeStmts(A_STMT(dstmt->child));
+  XREF(plExpr)    xpr = plSaveExpr(dstmt->expr);
+  plStmtDelay    *pls = P(rd);
+  pls->expr           = I(xpr);
+  pls->child          = I(rs);
+  plSaveStmt(rs,dstmt->child);
+}
+
+void TemplateModulePool::plSaveStmtEvent(XREF(plStmtEvent) re,StmtEvent *estmt)
+{
+  XREF(plExpr) xpr = plSaveExpr(estmt->expr);
+  plStmtEvent *pls = P(re);
+  pls->expr        = I(xpr);
+}
+
+void TemplateModulePool::plSaveStmtInst(XREF(plStmtInst) ri,StmtInst *istmt)
+{
+  XREF(plExpr) xp  = plSaveExpr(istmt->param),
+               xi  = plSaveExpr(istmt->inst);
+  plStmtInst  *pls = P(ri);
+  pls->name        = istmt->name;
+  pls->drv         = istmt->drv;
+  pls->udp         = istmt->udp;
+  pls->prim        = istmt->prim;
+  pls->param       = I(xp);
+  pls->inst        = I(xi);
+  BCOPY(istmt->ds,pls->ds,sizeof(pls->ds));
+}
+
+void TemplateModulePool::plSaveStmtTask(XREF(plStmtTask) rt,StmtTask *stmt_t)
+{
+  Task       *task = stmt_t->taskObj(stmt_t);
+  plStmtTask *pls  = P(rt);
+
+  assert(!task->glob);
+  pls->task_indx = stmt_t->task_indx;
+}
+
+void TemplateModulePool::plSaveStmtFunc(XREF(plStmtFunc) rf,StmtFunc *stmt_f)
+{
+  Func       *func = stmt_f->funcObj(stmt_f);
+  plStmtFunc *pls  = P(rf);
+
+  assert(!func->glob);
+  pls->func_indx = stmt_f->func_indx;
+}
+
+void TemplateModulePool::plSaveStmtFuncA(XREF(plStmtFuncA) rf,StmtFuncA *stmt_f)
+{
+  Func        *func = stmt_f->funcObj(stmt_f);
+  plStmtFuncA *pls  = P(rf);
+
+  assert(!func->glob);
+  pls->func_indx = stmt_f->func_indx;
+}
+
+void TemplateModulePool::plSaveStmtQC(XREF(plStmtQC) rq,StmtQC *stmt_qc)
+{
+
+}
+
+void TemplateModulePool::Init()
+{
+  if (self != this) {
+    ((TemplateModulePool *)self)->Init();
+  } else if (AO_MODULE != ao_typ) {
+    ao_typ     = AO_MODULE;
+    indxd_prts = 0;
+    stmts      = 0;
+    macro      = 0;
+    tsi        = 0;
+    tse        = 0;
+    pri        = 0;
+    pre        = 0;
+    def_prm    = 0;
+    specs      = 0;
+    ports      = 0;
+    scopes     = 0;
+    parms      = 0;
+    attrs      = 0;
+    branchs    = 0;
+    funcs      = 0;
+    tasks      = 0;
+    files      = 0;
+    unknowns   = 0;
+    IREF2MODE(NullRef,&port);
+    IREF2MODE(NullRef,&scope);
+    IREF2MODE(NullRef,&parm);
+    IREF2MODE(NullRef,&attr);
+    IREF2MODE(NullRef,&branch);
+    IREF2MODE(NullRef,&task);
+    IREF2MODE(NullRef,&func);
+    IREF2MODE(NullRef,&unknown);
+    IREF2MODE(NullRef,&file);
+  }
+}
+
+void TemplateModulePool::Load(Module *mod)
+{
+  mod->name       = name;
+  mod->found      = unknowns;
+  mod->stmt_count = stmts;
+  mod->typ        = (mod->macro = macro) ? AO_MACRO
+                                         : AO_MODULE;
+  mod->tsi        = tsi;
+  mod->tse        = tse;
+  mod->pri        = pri;
+  mod->pre        = pre;
+  mod->def_prm    = def_prm;
+  mod->specs      = specs;
+  mod->inst_count = inst_count;
+  mod->saved      = mngr_indx;
+}
+
+void TemplateModulePool::Init(Module *mod)
+{
+  poolRef    ref;
+  int        n,
+             l,
+             prts   = ports    = mod->port()->count(),
+             scps   = scopes   = mod->scope()->count(),
+             prms   = parms    = mod->parm()->count(),
+             atrs   = attrs    = mod->attr()->count(),
+             brns   = branchs  = mod->branch()->count(),
+             fncs   = funcs    = mod->func()->count(),
+             tsks   = tasks    = mod->task()->count(),
+             fls    = files    = mod->file()->count(),
+             unks   = unknowns = mod->unknown()->count();
+  ExprAlias *ea,
+            *ea_nxt = Aliases;
+
+  for (; ea = ea_nxt; delete ea) ea_nxt = ea->next;
+  Aliases = 0;
+
+  name       = mod->name;
+  found      = mod->found;
+  stmts      = mod->stmt_count;
+  macro      = mod->macro;
+  inst_count = mod->inst_count;
+  tsi        = mod->tsi;
+  tse        = mod->tse;
+  pri        = mod->pri;
+  pre        = mod->pre;
+  def_prm    = mod->def_prm;
+  specs      = mod->specs;
+  vmode      = mod->vmode;
+  def_disc   = mod->vd()->def_dsc_nm;
+
+  allocAligned(prts * sizeof(plPort),        8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->port);
+  allocAligned(scps * sizeof(plScope),       8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->scope);
+  allocAligned(prms * sizeof(MAX_PLATTR_OBJ),8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->parm);
+  allocAligned(atrs * sizeof(MAX_PLATTR_OBJ),8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->attr);
+  allocAligned(brns * sizeof(plBranch),      8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->branch);
+  allocAligned(tsks * sizeof(plPrtdObj),     8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->task);
+  allocAligned(fncs * sizeof(plPrtdObj),     8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->func);
+  allocAligned(unknowns * sizeof(plUnknown), 8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->unknown);
+  allocAligned(fls  * sizeof(poolRef),       8,&ref,ALC_PERM);
+  IREF2MODE(ref,&mi()->file);
+
+  XREF(plStmtAny) rs = makeStmts(stmts);
+  mi()->stmt         = I(rs);
+
+  XREF(plPort) prt = X(mi()->port);
+  for (n = 0; n < prts; n++) {
+    plSavePort(prt,mod->port_map(n));
+    INCR_REF(prt);
+  }
+
+  XREF(plScope) scrf = X(mi()->scope);
+  plScope *ps  = P(scrf);
+  for (n = 0; n < scps; n++,ps++) {
+    Scope *p = mod->scope_map(n);
+    ps->name = p->name;
+    ps->up   = p->up;
+    ps->dpth = p->dpth;
+  }
+
+  XREF(plPrtdObj) prf = X(mi()->func);
+  for (n = 0; n < fncs; n++) {
+    Func *fn = (Func *)mod->func_map(n);
+    plSavePrtdObj(prf,fn,fn->name,fn->stmt_count,0,fn->p_stmt);
+    XREF(plExpr) px = plSaveExpr(fn->range);
+    plFunc *plf     = (plFunc *)P(prf);
+    plf->range      = I(px);
+    plf->ret        = fn->ret;
+    INCR_REF(prf);
+  }
+
+  prf = X(mi()->task);
+  for (n = 0; n < tsks; n++) {
+    Task *tsk = (Task *)mod->task_map(n);
+    plSavePrtdObj(prf,tsk,tsk->name,tsk->stmt_count,0,tsk->p_stmt);
+    plTask *plt = (plTask *)P(prf);
+    INCR_REF(prf);
+  }
+
+  prf = X(mi()->func);
+  for (n = 0; n < fncs; n++) {
+    Func   *fn  = (Func *)mod->func_map(n);
+    plFunc *plf = (plFunc *)P(prf);
+    plSaveStmt(X(plf->stmt),fn->stmts);
+  }
+
+  prf = X(mi()->task);
+  for (n = 0; n < tsks; n++) {
+    Task   *tsk = (Task *)mod->task_map(n);
+    plTask *plt = (plTask *)P(prf);
+    plSaveStmt(X(plt->stmt),tsk->stmts);
+  }
+
+  for (n = 0; n < scps; n++) {
+    plSaveScope(scrf,mod->scope_map(n));
+    INCR_REF(scrf);
+  }
+
+  XREF(plBranch) brf = X(mi()->branch);
+  for (n = 0; n < brns; n++) {
+    plSaveBranch(brf,mod->branch_map(n));
+    INCR_REF(brf);
+  }
+
+  ASSERT(sizeof(MAX_PLATTR_OBJ) == sizeof(plRngdAttr));
+
+  XREF(plRngdAttr) arf = X(mi()->parm);
+  for (n = 0; n < prms; n++) {
+    plSaveAttr(*(XREF(plAttr) *)&arf,mod->parm_map(n));
+    INCR_REF(arf);
+  }
+
+  arf = X(mi()->attr);
+  for (n = 0; n < atrs; n++) {
+    plSaveAttr(*(XREF(plAttr) *)&arf,mod->attr_map(n));
+    INCR_REF(arf);
+  }
+
+  XREF(plUnknown) urf = X(mi()->unknown);
+  for (n = 0; n < unks; n++) {
+    if (plSaveUnknown(urf,mod->unknown_map(n))) {
+      INCR_REF(urf);
+    }
+  }
+
+  XREF(poolRef) frf = X(mi()->file);
+  for (n = 0; n < fls; n++) {
+    *P(frf) = mod->file_map(n)->ref;
+    INCR_REF(frf);
+  }
+
+  plSaveStmt(rs,mod->stmts);
+}
+
+void TemplateModulePool::mapTask(rrfTup *old,rrfTup *svd)
+{
+  if ((svd->scp = old->scp) < 0) {
+    plScope    *scp = &P(scope)[old->index];
+    poolRef     nm  = scp->name;
+    plPrtdObj  *tsk = P(task);
+    int         n   = tasks;
+
+    for (; n-- > 0 ; tsk++) {
+      if (SAME_REF(tsk->name,nm)) {
+        svd->index = n;
+        return;
+      }
+    }
+    assert(0);
+  }
+
+  svd->index = old->index;
+}
+
+void TemplateModulePool::mapFunc(rrfTup *old,rrfTup *svd)
+{
+  if ((svd->scp = old->scp) < 0) {
+    plScope   *scp = &P(scope)[old->index];
+    poolRef    nm  = scp->name;
+    plPrtdObj *fnc = P(func);
+    int        n   = funcs;
+
+    for (; n-- > 0 ; fnc++) {
+      if (SAME_REF(fnc->name,nm)) {
+        svd->index = n;
+        return;
+      }
+    }
+    assert(0);
+  }
+
+  svd->index = old->index;
+}
+
+poolRef TemplateModulePool::fileName(int n)
+{
+  poolRef *pref = P(file);
+
+  if (!pref) return NullRef;
+
+  return pref[n];
+}
+
+void *TemplateModulePool::forAllStmts(Module *mod,
+                                      StmtCallBackFn cb,void *data,int recurse)
+{
+  VStmtSaved  vs(mod);
+  int         i = 0,
+              n = stmts;
+  void       *v;
+
+  for (; i < n ; i++) {
+    plStmtAny *s = P(stmt);
+    vs.index     = i;
+    BCOPY(&s[i],&vs.stmt,vs.StmtSize[s[i].Header.typ]);
+    switch (vs.stmt.Header.typ) {
+# include "for_all_stmt.inc"
+    }
+  }
+
+  return 0;
+}
+
+void TemplateModulePool::evalDfPrm(Module *mod,Inst *ip,int n)
+{
+  VStmtSaved  vs(mod);
+  plStmtAny  *s = P(stmt);
+
+  s += (vs.index = ip->dp_stmt[n]);
+
+  BCOPY(s,&vs.stmt,vs.StmtSize[s->Header.typ]);
+
+  vs.evalDfPrm(ip);
+}
+
+int TemplateModulePool::findImr(Inst *ip,int n,poolRef *names,
+                                XmrData *ret) // set typ
+{
+  eRFF t = ret->typ.need;
+  int  l;
+
+  if (n > 1) {
+    if (l = scopes) {
+      int      s  = 0;
+      plScope *ps = P(scope);
+
+      for (; s < l ; s++) {
+        if (SAME_REF(*names,ps[s].name)) {
+          assert(0);
+        }
+      }
+    }
+    return -1;
+  }
+
+  if ((t & RFF_PARM) && (l = parms))
+  {
+    MAX_PLATTR_OBJ *pa = P(parm);
+    int             p  = 0;
+
+    for (; p < l ; p++,pa++) {
+      poolRef nm;
+      if (pa->typ & ATTR_USR) {
+        nm = pa->nm;
+      } else {
+        nm.pool  = pa->pool;
+        nm.index = pa->index;
+      }
+      if (SAME_REF(*names,nm)) {
+        ret->scp     = -1;
+        ret->typ.got = REF_PARM;
+        ret->index   = p;
+        return p;
+      }
+    }
+  }
+
+  if ((t & RFF_PORT) && (l = ports))
+  {
+    plPort *prt = P(port);
+    int     p   = 0;
+
+    for (; p < l ; p++,prt++) {
+      if (SAME_REF(*names,prt->name)) {
+        ret->scp     = -1;
+        ret->typ.got = REF_PORT;
+        ret->index   = p;
+        return p;
+      }
+    }
+  }
+
+  if ((t & RFF_HIER) && (l = unknowns))
+  {
+    plUnknown *punk = P(unknown);
+    int        p    = 0;
+
+    for (; p < l ; p++,punk++) {
+      if (SAME_REF(*names,punk->nm)) {
+        ret->scp     = -1;
+        ret->typ.got = REF_UNKNOWN;
+        ret->index   = p;
+        return p;
+      }
+    }
+  }
+
+done:
+  return -1;
+}
+
+eREF TemplateModulePool::unkRefType(int i)
+{
+  plUnknown *plu = P(unknown);
+
+  return plu[i].rtyp;
+}
+
+Inst *TemplateModulePool::locateRef(Inst *ip,plExpr *xpr,
+                                    XmrData *ret,eXMR xio) // set ret typ
+{
+  poolRef  ref = NullRef;
+  Inst    *ipr = ip;
+  int      i;
+  plPort  *prt;
+
+  switch (xpr->typ) {
+  case VT_REFL:
+                switch (xpr->rtyp) {
+                case REF_PORT:
+                  i         = xpr->value.rrf.index;
+                  prt       = P(port);
+                  prt      += i;
+                  ref       = prt->name;
+                  if (prt->ptyp & PT_HIER) {
+                    if (ipr = TemplatePoPool::locateRef(ip,i,ref,ret,xio)) {
+                      return ipr;
+                    }
+                    goto failed;
+                  }
+                }
+                ret->typ.got = (eREF)xpr->rtyp;
+                ret->scp     = xpr->value.rrf.scp;
+                ret->index   = xpr->value.rrf.index;
+                return ipr;
+  }
+failed:
+  String buff;
+  ErrorMsg(S_ERROR(STS_ELAB),"Failed to locate reference %s from %s",
+                             strDeref(ref),ip->path(&buff));
+  return 0;
+}
+
+poolRef TemplateModulePool::itemName(eREF typ,int i)
+{
+  switch (typ) {
+  case REF_PORT:    {plPort *prt = P(port);
+                     prt += i;
+                     return prt->name;}
+  case REF_UNKNOWN: {plUnknown *punk = P(unknown);
+                     punk += i;
+                     return punk->nm;}
+  case REF_PARM:    {MAX_PLATTR_OBJ *pattr = P(parm);
+                     pattr += i;
+                     return pattr->nm;}
+  }
+  assert(("itemName/typ",0));
+
+  return NullRef;
+}
+
+long TemplateModulePool::plSaveStmt(XREF(plStmtAny) srf,Stmt *stmt0)
+{
+  Stmt    *stmt = stmt0;
+  int      n    = 0;
+  poolRef  ref;
+
+  for (n = 0,stmt = stmt0; stmt ; n++, stmt = stmt->next, INCR_REF(srf)) {
+
+    plStmtAny *pls      = P(srf);
+    pls->Header.line    = stmt->line;
+    pls->Header.file_id = stmt->file_id;
+
+    switch (pls->Header.typ = stmt->stmt_typ()) {
+#define STATEMENT(e,t,m) case e: plSave##t(*(XREF(pl##t) *)&srf,(t *)stmt); break;
+#include "statement.inc"
+    default:                     assert(("Bad Statement type in Module",0));
+    }
+  }
+
+  return n;
+}
+
+eCG TemplateModulePool::codegen(Inst *ip,Module *mod,Stream *out,Stream *prx,
+                                eCodeMode)
+{
+  cgData       cg;
+  eCG          sts;
+  String       is;
+  StringStream init(&is);
+
+  cg.dbg_nl      = "\n";
+
+  //  cg.c_line_frmt = "\n#line %d \"%s\"\n";
+  cg.c_line_frmt = "\n// line %d \"%s\"\n";
+
+  cg.mod = mod;
+  cg.ip  = ip;
+
+  prx->printf("\n# define _time_u_ %de%d"
+              "\n# define _time_p_ %de%d\n"
+              "\ninline _SimTime::operator uint64_t() {\n"
+              "  return _SCALE_TIME(t);\n}\n\n",
+              tsi,tse,pri,pre);
+
+  cg.strm[CS_PRE]   = prx;
+  cg.strm[CS_DECL]  = out;
+  cg.strm[CS_CODE]  = out;
+  cg.strm[CS_CNTXT] = out;
+  cg.strm[CS_INIT]  = &init;
+
+  sts = codegenPorts(ports,P(port),&cg);
+  sts = codegenFunc (funcs,P(func),&cg,0);
+  sts = codegenTask (tasks,P(task),&cg,0);
+  sts = codegenStmts(stmts,P(stmt),&cg);
+
+  int c = cg.Cntxt(),
+      i;
+
+  out->printf("\n _M_CLASS_(_Inst *);\n};\n\n");
+
+  for (i = 0; i <= c ; i++) {
+    out->printf("C_ENTRY_POINT_FWD(proc%d_0)(void *); C_ENTRY_POINT_DWF\n",i);
+  }
+
+  out->printf("\n"
+              "_M_CLASS_::_M_CLASS_(_Inst *_ip) {\n"
+              "  setSimIp(ip = _ip);\n"
+              "  %s\n",
+              is.str());
+
+  for (i = 0; i <= c ; i++) {
+    const char *cp;
+    switch (*(cp = cg.str(i))) {
+    case 'a':
+    case 'i':
+    case 'd':
+      out->printf("   StartProc(&_%s_%d,proc%d_0);\n",cp,i,i);
+    }
+  }
+  out->printf("};\n\n");
+  
+  for (i = 0; i <= c ; i++) {
+    char       t = *cg.str(i),
+              *tf;
+    plPrtdObj *po;
+    /*
+    switch (t) {
+    case 't': po = &P(task)[cg.C_Idx(i)]; break;
+    case 'f': po = &P(func)[cg.C_Idx(i)]; break;
+    }
+    */
+    for (int s = cg.Susp(i); s-- > 0; ) {
+      char ch;
+      switch (ch = *cg.str(i)) {
+      case 't':
+      case 'f':
+        continue;
+      case 'a':
+      case 'i':
+      case 'd':
+        out->printf("C_ENTRY_POINT(proc%d_%d)(void *ep) {\n"
+                    "  const _M_CLASS_ *mp = 0;\n"
+                    " ((_M_CLASS_ *)&((char *)ep)[-(intptr_t)&mp->_%c_%d])->_proc_%d((_Context *)ep,%d);\n"
+                    "}\n",i,s,ch,i,i,s);
+      }
+    }
+  }
+
+  return sts;
+}

@@ -1,0 +1,26 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: gcc.gmk,v 1.21 2010/05/02 21:17:29 dkc Exp $
+ 
+
+ifeq ($(USR_GNU_INC),NO)
+  SYS_CFLAGS_A=-nostdinc
+  SYS_CFLAGS_Z=-I/usr/include
+endif
+
+ifndef GCC
+  GCC=gcc $(SYS_CFLAGS_A)
+endif
+
+ifndef GNU_PIC
+GNU_PIC     = -fPIC
+endif
+
+CC=$(PURIFY) $(GCC) $(MODE_CFLAG) $(GCC_VERSION)
+
+CFLAGS      =$(OPT_CFLAGS) $(USR_GNU_CFLAGS) $(USR_CFLAGS) $(WFLAG) $(GCC_FLAGS)
+COMPILE_C   =$(CC) $(CFLAGS) $(C_INCLUDES) $(C_INCLUDES_2) $(SYS_CFLAGS_Z)
+C_MK_DEPS   =$(CC) $(CFLAGS) $(C_INCLUDES) $(C_INCLUDES_2) $(SYS_CFLAGS_Z) -M
+LINK_C      =$(CC) $(OPT_CFLAGS) $(USR_GNU_CFLAGS) $(LINK_FLAGS)
+
+LINK_LIB    =-l

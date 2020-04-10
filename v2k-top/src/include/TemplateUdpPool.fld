@@ -1,0 +1,10 @@
+/* Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron */
+/* Distributed under the GNU Lesser General Public License */
+/* RCS ID: $Id: TemplateUdpPool.fld,v 1.8 2003/01/14 02:26:07 dkc Exp $ */
+  
+
+
+char             seq;
+short            in;
+short            out;
+IREF(char)       VAR_ARRAY_PTR(table);

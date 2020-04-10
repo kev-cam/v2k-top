@@ -1,0 +1,65 @@
+# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: export.gmk,v 1.16 2009/11/28 09:02:03 dkc Exp $
+ 
+
+
+EXPORT_SCRIPTS=mk.sh mk.csh $(EXP_EXTRA)
+
+ifeq ($(PROJECT),v2k)
+EXPORT_PARC= parc.h
+ifndef NO_SYSTEMC
+EXPORT_PARC+= systemc.h
+endif
+endif
+
+INSTALL=install
+#INSTALL_ARGS=
+
+bin/%::bin/%.csh
+	@echo linking $(patsubst bin/%,%.csh,$@) in `cd bin ; pwd`
+	@rm -f $@
+	@ln -s $(patsubst bin/%,%.csh,$@) $@
+
+export/bin/%:bin/% all.gmk
+	FRM=$(patsubst export/bin/%,bin/%,$@);\
+	if [ ! -d $(dir $@) ] ; then mkdir $(dir $@); fi;\
+	if [ -h $$FRM ] ; then \
+	  tar -cf - $$FRM | (cd export ; tar -xvf -) ;\
+	else\
+	  rm -f $@ ;\
+	  $(INSTALL) $(INSTALL_ARGS) -m -w+xr $$FRM $@ ;\
+	fi
+
+export/include/%:src/include/% all.gmk
+	FRM=$(patsubst export/include/%,src/include/%,$@);\
+	if [ ! -d $(dir $@) ] ; then mkdir $(dir $@); fi;\
+	if [ -h $$FRM ] ; then \
+	  tar -cf - $$FRM | (cd export ; tar -xvf -) ;\
+	else\
+	  rm -f $@ ;\
+	  $(INSTALL) $(INSTALL_ARGS) -m -wx+r $$FRM $@ ;\
+	fi
+
+export/include/parc/%:src/include/% all.gmk
+	FRM=$(patsubst export/include/parc/%,src/include/%,$@);\
+	if [ ! -d $(dir $@) ] ; then mkdir $(dir $@); fi;\
+	if [ -h $$FRM ] ; then \
+	  tar -cf - $$FRM | (cd export ; tar -xvf -) ;\
+	else\
+	  rm -f $@ ;\
+	  $(INSTALL) $(INSTALL_ARGS) -m -wx+r $$FRM $@ ;\
+	fi
+
+fix_mk:
+	rm -f export/bin/mk ; ln -s mk.csh export/bin/mk
+
+EXPORTS=$(foreach x,$(EXPORT_SCRIPTS),export/bin/$(x))
+XINCLUD=$(foreach x,$(EXPORT_PARC),export/include/parc/$(x))
+exports: $(EXPORTS) $(XINCLUD) fix_mk
+	@echo "Exported: " ; ls -l $(EXPORTS) $(XINCLUD) export/bin/mk
+
+imports:
+	if [ ! -d import ] ; then mkdir import ; fi
+	rm import/$(PROJECT);\
+	ln -s ../export import/$(PROJECT)

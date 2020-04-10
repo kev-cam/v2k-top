@@ -1,0 +1,38 @@
+# Copyright (c) 1998-2007 Kevin Cameron
+# Distributed under the GNU Lesser General Public License
+# RCS ID: $Id: vpp.tdf,v 1.10 2007/02/01 06:49:07 dkc Exp $
+#
+# all Verilog-AMS
+#
+`celldefine
+`default_nettype
+`define
+`else
+`endcelldefine
+`endif
+`ifdef
+`ifndef
+`include
+`nounconnected_drive
+`resetall
+`timescale
+`unconnected_drive
+`undef
+`language
+`endlanguage
+`default_discipline
+`discipline
+`enddiscipline
+`default_decay_time
+`default_trireg_strength
+`delay_mode_distributed
+`delay_mode_path
+`delay_mode_unit
+`delay_mode_zero
+`set_discipline
+`suppress_faults
+`nosuppress_faults
+`protect
+`endprotect
+`protected
+`endprotected
