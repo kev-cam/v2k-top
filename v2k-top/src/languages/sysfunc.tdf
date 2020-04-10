@@ -1,7 +1,0 @@
-# Copyright (c) 1998-2007 Kevin Cameron
-# Distributed under the GNU Lesser General Public License
-# RCS ID: $Id: sysfunc.tdf,v 1.4 2007/02/01 06:49:08 dkc Exp $
-#
-random
-time
-typeof

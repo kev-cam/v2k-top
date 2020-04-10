@@ -1,7 +1,0 @@
-# Copyright (c) 2012 Kevin Cameron
-# Distributed under the GNU Lesser General Public License
-# RCS ID: $Id: clang++-g.gmk,v 1.1 2020/04/06 22:35:43 dkc Exp $
- 
-
-OPT_CXXFLAGS=-g $(DEBUG_DEFS)
-include $(CONFIG_DIR)/clang++.gmk

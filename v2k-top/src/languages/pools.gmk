@@ -1,9 +1,0 @@
-# Copyright (c) 1998-2007 Kevin Cameron
-# Distributed under the GNU Lesser General Public License
-# RCS ID: $Id: pools.gmk,v 1.15 2007/10/09 21:24:29 dkc Exp $
- 
-COMMON_LST =whitespace,operators,punctuation,quotes,comments,timing
-VERILOG_LST=$(COMMON_LST),vpp,verilog,tasks,sysfunc,acctfvpi,math,global,signal
-SDF_LST    =$(COMMON_LST),sdf
-CPP_LST    =whitespace,punctuation,quotes,comments,vpp,cpp,cppops
-

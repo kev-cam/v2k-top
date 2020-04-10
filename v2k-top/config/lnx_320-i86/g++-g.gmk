@@ -1,8 +1,0 @@
-# Copyright (c) 1998,1999,2001,2002 Kevin Cameron
-# Distributed under the GNU Lesser General Public License
-# RCS ID: $Id: g++-g.gmk,v 1.1 2012/07/19 09:30:39 dkc Exp $
- 
-
-
-OPT_CXXFLAGS=-g $(DEBUG_DEFS)
-include $(CONFIG_DIR)/g++.gmk

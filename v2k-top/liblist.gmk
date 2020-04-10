@@ -1,9 +1,0 @@
-# Copyright (c) 1998,1999,2001,2002,2003 Kevin Cameron
-# Distributed under the GNU Lesser General Public License
-# RCS ID: $Id: liblist.gmk,v 1.8 2005/04/11 20:54:55 dkc Exp $
- 
-
-
-LIBS = common languages cyn models v2kprl v2ksim parc
-
-
