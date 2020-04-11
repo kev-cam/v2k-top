@@ -2,8 +2,6 @@
 /* Distributed under the GNU Lesser General Public License */
 /* RCS ID: $Id: sdf.inc,v 1.8 2007/02/01 06:49:08 dkc Exp $ */
   
-
-
 SDF_TBL(plPortPath,pp)
 SDF_TBL(double,    dbl)
 SDF_TBL(plRtriple, trpl)
